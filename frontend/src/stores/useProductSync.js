@@ -60,7 +60,25 @@ export function useProductSync(options = {}) {
     7: "RECALLED",
   };
 
-  function getHolderRoleFromStatus(statusNum) {
+  // Special vault addresses from smart contract
+  const QUARANTINE_VAULT = "0x000000000000000000000000000000000000dead";
+  const ARCHIVE_VAULT = "0x000000000000000000000000000000000000aaaa";
+
+  function getHolderRoleFromAddress(address) {
+    const addr = address.toLowerCase();
+    if (addr === QUARANTINE_VAULT) return "QUARANTINE";
+    if (addr === ARCHIVE_VAULT) return "ARCHIVE";
+    return null; // Not a special vault
+  }
+
+  function getHolderRoleFromStatus(statusNum, ownerAddress = null) {
+    // Check special vault addresses first
+    if (ownerAddress) {
+      const vaultRole = getHolderRoleFromAddress(ownerAddress);
+      if (vaultRole) return vaultRole;
+    }
+
+    // Status-based role mapping
     const map = {
       1: "FARMER",
       2: "FARMER",
@@ -109,7 +127,7 @@ export function useProductSync(options = {}) {
           const metadata = await loadMetadataFromURI(uri);
           const name = metadata?.name || `Lô #${i}`;
           const statusName = STATUS_MAP[Number(status)] || "NOT_EXIST";
-          const holderRole = getHolderRoleFromStatus(Number(status));
+          const holderRole = getHolderRoleFromStatus(Number(status), owner);
 
           productsStore.addProductFromOnChain({
             id: i,
@@ -343,7 +361,7 @@ export function useProductSync(options = {}) {
         product.currentHolderAddress = to.toLowerCase();
         const status = await contract.getBatchStatus(tokenId);
         const statusName = STATUS_MAP[Number(status)];
-        const holderRole = getHolderRoleFromStatus(Number(status));
+        const holderRole = getHolderRoleFromStatus(Number(status), to);
 
         product.status = statusName;
         product.currentHolderRole = holderRole;

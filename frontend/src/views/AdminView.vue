@@ -76,6 +76,15 @@
           <span v-if="product.currentHolderRole === 'QUARANTINE'">
             ✅ Đã gửi về kho cách ly
           </span>
+          <span v-else-if="product.currentHolderRole === 'FARMER'">
+            ⏳ Chờ Farmer gửi về quarantine
+          </span>
+          <span v-else-if="product.currentHolderRole === 'LOGISTICS'">
+            ⏳ Chờ Logistics gửi về quarantine
+          </span>
+          <span v-else-if="product.currentHolderRole === 'RETAILER'">
+            ⏳ Chờ Retailer gửi về quarantine
+          </span>
           <span v-else> ⏳ Chờ holder gửi về quarantine </span>
         </button>
       </template>
