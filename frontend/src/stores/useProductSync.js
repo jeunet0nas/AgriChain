@@ -209,6 +209,15 @@ export function useProductSync(options = {}) {
         const product = productsStore.getById(batchId);
         if (!product) continue;
 
+        // Validate event args
+        if (!event.args.farmer) {
+          console.warn(
+            `[${viewName}] BatchMinted event missing farmer:`,
+            batchId
+          );
+          continue;
+        }
+
         const block = await event.getBlock();
         const farmer = event.args.farmer.toLowerCase();
 
@@ -227,6 +236,15 @@ export function useProductSync(options = {}) {
         const product = productsStore.getById(batchId);
         if (!product) continue;
 
+        // Validate event args
+        if (!event.args.inspector) {
+          console.warn(
+            `[${viewName}] BatchInspected event missing inspector:`,
+            batchId
+          );
+          continue;
+        }
+
         const block = await event.getBlock();
 
         productsStore.addEvent(batchId, {
@@ -244,6 +262,19 @@ export function useProductSync(options = {}) {
         const batchId = Number(event.args.batchId);
         const product = productsStore.getById(batchId);
         if (!product) continue;
+
+        // Validate event args
+        if (
+          event.args.updater === undefined ||
+          event.args.oldStatus === undefined ||
+          event.args.newStatus === undefined
+        ) {
+          console.warn(
+            `[${viewName}] StatusUpdated event missing args:`,
+            batchId
+          );
+          continue;
+        }
 
         const block = await event.getBlock();
         const oldStatusName = STATUS_MAP[Number(event.args.oldStatus)];
@@ -273,6 +304,12 @@ export function useProductSync(options = {}) {
         if (event.args.from === "0x0000000000000000000000000000000000000000")
           continue;
 
+        // Validate event args exist
+        if (!event.args.to || !event.args.from) {
+          console.warn(`[${viewName}] Transfer event missing args:`, tokenId);
+          continue;
+        }
+
         const block = await event.getBlock();
 
         productsStore.addEvent(tokenId, {
@@ -291,6 +328,15 @@ export function useProductSync(options = {}) {
         const batchId = Number(event.args.batchId);
         const product = productsStore.getById(batchId);
         if (!product) continue;
+
+        // Validate event args
+        if (!event.args.caller) {
+          console.warn(
+            `[${viewName}] BatchRecalled event missing caller:`,
+            batchId
+          );
+          continue;
+        }
 
         const block = await event.getBlock();
 
@@ -603,6 +649,14 @@ export async function reloadProductEvents(productId) {
       // Skip mint transfers
       if (event.args.from === "0x0000000000000000000000000000000000000000")
         continue;
+
+      // Validate event args exist
+      if (!event.args.to || !event.args.from) {
+        console.warn(
+          `[reloadProductEvents] Transfer event missing args for product ${productId}`
+        );
+        continue;
+      }
 
       const block = await event.getBlock();
       productsStore.addEvent(productId, {

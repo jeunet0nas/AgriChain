@@ -119,7 +119,8 @@ import { computed, ref } from "vue";
 import { ethers } from "ethers";
 import { useProductsStore } from "../stores/useProductsStore";
 import { useSessionStore } from "../stores/useSessionStore";
-import { getSignerContract } from "../web3/contractClient";
+import { useProductFilters } from "../composables/useProductFilters";
+import { useTokenTransfer } from "../composables/useTokenTransfer";
 import RoleProductTable from "../components/role/RoleProductTable.vue";
 import FarmerCreateBatchForm from "../components/farmer/FarmerCreateBatchForm.vue";
 import SendProductModal from "../components/shared/SendProductModal.vue";
@@ -127,82 +128,27 @@ import SendProductModal from "../components/shared/SendProductModal.vue";
 const productsStore = useProductsStore();
 const session = useSessionStore();
 
+// Use composables for cleaner code
+const { filterByStatus, filterByStatuses, recalledProductsToQuarantine } =
+  useProductFilters();
+const { transferToken, sendToQuarantine } = useTokenTransfer();
+
 const roles = computed(() => session.roles);
 const currentAccount = computed(() => session.currentAccount);
 
-// --- state cho modal ---
+// Modal state
 const showSendModal = ref(false);
 const selectedProduct = ref(null);
 
 // Helper constants
 const LOGISTICS_ROLE = ethers.id("LOGISTICS_ROLE");
 
-// - Chỉ hiển thị products thuộc sở hữu của currentAccount
-// - Bảo mật tốt hơn: user chỉ thấy products của mình
-const farmerProducts = computed(() => {
-  if (!currentAccount.value) {
-    console.log("[FarmerView] No currentAccount, returning empty array");
-    return [];
-  }
+// Filtered products using composables
+const farmerProducts = filterByStatuses(["HARVESTED", "INSPECTING"]);
+const farmerInspectingProducts = filterByStatus("INSPECTING");
+const recalledFarmerProducts = recalledProductsToQuarantine;
 
-  const filtered = productsStore.products.filter((p) => {
-    const isMyProduct =
-      p.currentHolderAddress?.toLowerCase() ===
-      currentAccount.value.toLowerCase();
-    const isFarmerManageable =
-      p.status === "HARVESTED" || p.status === "INSPECTING";
-
-    // Debug log
-    if (p.status === "HARVESTED" || p.status === "INSPECTING") {
-      console.log(`[FarmerView] Product ${p.id}:`, {
-        holderAddress: p.currentHolderAddress,
-        currentAccount: currentAccount.value,
-        isMyProduct,
-        status: p.status,
-      });
-    }
-
-    return isMyProduct && isFarmerManageable;
-  });
-
-  console.log(
-    `[FarmerView] Filtered ${filtered.length} farmer products from ${productsStore.products.length} total`
-  );
-  return filtered;
-});
-
-// ✅ Lọc lô INSPECTING theo địa chỉ ví
-// - Lô đã được inspector attest, chờ farmer gửi cho logistics
-const farmerInspectingProducts = computed(() => {
-  if (!currentAccount.value) return [];
-
-  return productsStore.products.filter((p) => {
-    const isMyProduct =
-      p.currentHolderAddress?.toLowerCase() ===
-      currentAccount.value.toLowerCase();
-    const isInspecting = p.status === "INSPECTING";
-
-    return isMyProduct && isInspecting;
-  });
-});
-
-// ✅ Lọc lô RECALLED theo địa chỉ ví
-// - Admin đã thu hồi, farmer cần gửi về QUARANTINE_VAULT
-const recalledFarmerProducts = computed(() => {
-  if (!currentAccount.value) return [];
-
-  return productsStore.products.filter((p) => {
-    const isMyProduct =
-      p.currentHolderAddress?.toLowerCase() ===
-      currentAccount.value.toLowerCase();
-    const isRecalled = p.status === "RECALLED";
-    const notInQuarantine = p.currentHolderRole !== "QUARANTINE";
-
-    return isMyProduct && isRecalled && notInQuarantine;
-  });
-});
-
-// 👇 Modal handlers
+// Modal handlers
 function openSendModal(product) {
   selectedProduct.value = product;
   showSendModal.value = true;
@@ -213,64 +159,21 @@ function closeSendModal() {
   selectedProduct.value = null;
 }
 
-// 👇 Xử lý khi modal emit success
+// Handle successful transfer to logistics
 async function handleSendSuccess({ product, recipientAddress }) {
   try {
-    // 0. Kiểm tra wallet đã kết nối chưa
-    if (!currentAccount.value) {
-      console.error("[FarmerView] Wallet not connected");
-      alert("Vui lòng kết nối ví MetaMask trước khi thực hiện giao dịch.");
-      return;
-    }
-
-    const contract = await getSignerContract();
-
-    // 1. Đọc số lượng token farmer đang giữ
-    const fromAddress = currentAccount.value;
-    // ERC721: Check ownership
-    const owner = await contract.ownerOf(product.id);
-    if (owner.toLowerCase() !== fromAddress.toLowerCase()) {
-      console.error("[FarmerView] You don't own this batch");
-      alert(`Bạn không sở hữu lô #${product.id}. Không thể chuyển giao.`);
-      return;
-    }
-
-    // ERC721: transferFrom (no amount, no data)
-    const tx = await contract.transferFrom(
-      fromAddress,
-      recipientAddress,
-      product.id
-    );
-
-    console.log("[FarmerView] sending tx transferFrom:", tx.hash);
-    await tx.wait();
-
-    // 3. Cập nhật store (tắt auto-add event để tránh duplicate với blockchain event)
-    const actor = fromAddress || "0xFARMER...DEMO";
-    const timestamp = new Date().toISOString();
-
-    productsStore.updateStatus(product.id, "IN_TRANSIT", {
-      actor,
-      locationHash: undefined,
-      timestamp,
-      currentHolderRole: "LOGISTICS",
-      currentHolderAddress: recipientAddress,
-      addEvent: false, // Tắt auto-add, để blockchain event tự add
-    });
-
-    // 4. Đóng modal
+    await transferToken(product, recipientAddress, "IN_TRANSIT", "LOGISTICS");
     closeSendModal();
-
     console.log("[FarmerView] Transfer to logistics success!");
-  } catch (e) {
-    console.error("[FarmerView] handleSendSuccess error:", e);
-    // Lỗi sẽ được xử lý ở modal nếu cần
+  } catch (error) {
+    console.error("[FarmerView] Transfer failed:", error);
+    alert(`Lỗi: ${error.message}`);
   }
 }
 
-// RECALLED (holder = FARMER) -> gửi về QUARANTINE_VAULT (on-chain)
-async function sendFarmerRecalledToQuarantine(p) {
-  if (!p || p.status !== "RECALLED" || p.currentHolderRole !== "FARMER") return;
+// Send RECALLED product to QUARANTINE_VAULT
+async function sendFarmerRecalledToQuarantine(product) {
+  if (!product || product.status !== "RECALLED") return;
 
   if (!currentAccount.value) {
     alert("Vui lòng kết nối ví MetaMask.");
@@ -278,40 +181,11 @@ async function sendFarmerRecalledToQuarantine(p) {
   }
 
   try {
-    console.log(
-      `[FarmerView] Sending RECALLED product ${p.id} to QUARANTINE_VAULT`
-    );
-
-    const contract = await getSignerContract();
-    const fromAddress = currentAccount.value;
-    const QUARANTINE_VAULT = "0x000000000000000000000000000000000000dEaD";
-
-    // ERC721: Check ownership
-    const owner = await contract.ownerOf(p.id);
-    if (owner.toLowerCase() !== fromAddress.toLowerCase()) {
-      alert(`Bạn không sở hữu lô #${p.id}`);
-      return;
-    }
-
-    // ERC721: Transfer to QUARANTINE_VAULT
-    const tx = await contract.transferFrom(fromAddress, QUARANTINE_VAULT, p.id);
-
-    console.log(`[FarmerView] Quarantine transaction sent:`, tx.hash);
-    await tx.wait();
-    console.log(
-      `[FarmerView] ✅ Product ${p.id} sent to quarantine successfully`
-    );
-
-    // Update store
-    const product = productsStore.getById(p.id);
-    if (product) {
-      product.currentHolderRole = "QUARANTINE";
-      product.currentHolderAddress = QUARANTINE_VAULT;
-      product.farmerQuarantineSent = true;
-    }
-  } catch (e) {
-    console.error(`[FarmerView] sendFarmerRecalledToQuarantine error:`, e);
-    alert(`Lỗi: ${e.message || "Không thể gửi về kho cách ly"}`);
+    await sendToQuarantine(product);
+    console.log(`[FarmerView] ✅ Product ${product.id} sent to quarantine`);
+  } catch (error) {
+    console.error("[FarmerView] Quarantine transfer failed:", error);
+    alert(`Lỗi: ${error.message || "Không thể gửi về kho cách ly"}`);
   }
 }
 </script>

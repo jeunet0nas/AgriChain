@@ -8,44 +8,96 @@
     </p>
 
     <div class="grid grid-cols-1 gap-3 text-xs">
+      <!-- Row 1: Tên Lô + Loại -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="space-y-1">
+          <label class="font-medium text-slate-700 flex items-center gap-1">
+            Tên Lô Hàng
+            <span class="text-red-500">*</span>
+          </label>
+          <input
+            v-model="formBatchName"
+            type="text"
+            class="w-full rounded-xl border border-slate-300 px-3 py-2"
+            placeholder="VD: Lô xoài cát Hòa Lộc 2025-01"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label class="font-medium text-slate-700 flex items-center gap-1">
+            Loại sản phẩm
+            <span class="text-red-500">*</span>
+          </label>
+          <select
+            v-model="formProductType"
+            class="w-full rounded-xl border border-slate-300 px-3 py-2 bg-white"
+          >
+            <option value="" disabled>Chọn loại sản phẩm</option>
+            <option value="fruit">Trái cây</option>
+            <option value="vegetable">Rau củ</option>
+            <option value="grain">Ngũ cốc</option>
+            <option value="seafood">Thủy sản</option>
+            <option value="meat">Thịt gia súc/gia cầm</option>
+            <option value="other">Khác</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Row 2: Ngày thu hoạch + Tên nông trại -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="space-y-1">
+          <label class="font-medium text-slate-700 flex items-center gap-1">
+            Ngày thu hoạch
+            <span class="text-red-500">*</span>
+          </label>
+          <input
+            v-model="formHarvestDate"
+            type="date"
+            class="w-full rounded-xl border border-slate-300 px-3 py-2"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label class="font-medium text-slate-700 flex items-center gap-1">
+            Tên nông trại / Hộ sản xuất
+            <span class="text-red-500">*</span>
+          </label>
+          <input
+            v-model="formFarmName"
+            type="text"
+            class="w-full rounded-xl border border-slate-300 px-3 py-2"
+            placeholder="VD: Nông trại Hòa Lộc, Hộ ông Nguyễn Văn A"
+          />
+        </div>
+      </div>
+
+      <!-- Row 3: Địa chỉ -->
       <div class="space-y-1">
         <label class="font-medium text-slate-700 flex items-center gap-1">
-          Tên / ghi chú lô
+          Địa chỉ
           <span class="text-red-500">*</span>
         </label>
         <input
-          v-model="formName"
+          v-model="formAddress"
           type="text"
           class="w-full rounded-xl border border-slate-300 px-3 py-2"
-          placeholder="VD: Lô xoài cát Hòa Lộc 2025-01"
+          placeholder="VD: Xã XYZ, Huyện ABC, Tỉnh DEF"
         />
       </div>
 
+      <!-- Row 4: Mô tả thêm -->
       <div class="space-y-1">
         <label class="font-medium text-slate-700 flex items-center gap-1">
-          Mô tả lô hàng
+          Mô tả thêm
         </label>
         <textarea
           v-model="formDescription"
           rows="2"
           class="w-full rounded-xl border border-slate-300 px-3 py-2"
-          placeholder="VD: Xoài cát Hòa Lộc xuất khẩu, chất lượng cao"
+          placeholder="VD: Sản phẩm organic, không sử dụng thuốc trừ sâu..."
         ></textarea>
-      </div>
-
-      <div class="space-y-1">
-        <label class="font-medium text-slate-700 flex items-center gap-1">
-          Vị trí (địa điểm / kho / nông trại)
-          <span class="text-red-500">*</span>
-        </label>
-        <input
-          v-model="formLocation"
-          type="text"
-          class="w-full rounded-xl border border-slate-300 px-3 py-2"
-          placeholder="VD: Huyện XYZ, Tỉnh ABC"
-        />
         <p class="text-[10px] text-slate-400">
-          Location data được lưu trong IPFS metadata (không on-chain)
+          Tất cả thông tin được lưu trong IPFS metadata (không on-chain)
         </p>
       </div>
     </div>
@@ -218,6 +270,7 @@ import { ethers } from "ethers";
 import imageCompression from "browser-image-compression";
 import { useSessionStore } from "../../stores/useSessionStore";
 import { getSignerContract } from "../../web3/contractClient";
+import { hashAddress } from "../../utils/helpers";
 import {
   uploadMetadataToIPFS,
   uploadImageToIPFS,
@@ -230,9 +283,12 @@ const session = useSessionStore();
 const isFarmer = computed(() => session.roles.FARMER);
 
 // Form state
-const formName = ref("");
+const formBatchName = ref("");
+const formProductType = ref("");
+const formHarvestDate = ref("");
+const formFarmName = ref("");
+const formAddress = ref("");
 const formDescription = ref("");
-const formLocation = ref("");
 
 // Submission state
 const submitting = ref(false);
@@ -249,9 +305,12 @@ const uploadingImage = ref(false);
 const uploadProgress = ref(0);
 
 function resetForm() {
-  formName.value = "";
+  formBatchName.value = "";
+  formProductType.value = "";
+  formHarvestDate.value = "";
+  formFarmName.value = "";
+  formAddress.value = "";
   formDescription.value = "";
-  formLocation.value = "";
   clearImage();
 }
 
@@ -343,13 +402,16 @@ async function compressImage(file) {
 /**
  * Create metadata JSON and upload to IPFS (or localStorage fallback)
  */
-async function createMetadataURI(name, location, imageCID = null) {
+async function createMetadataURI(imageCID = null) {
   const metadata = {
-    name: name || "Lô không tên",
-    description: formDescription.value || `Lô sản phẩm nông nghiệp`,
-    location: location || "Chưa xác định",
+    name: formBatchName.value || "Lô không tên",
+    productType: formProductType.value || "other",
+    harvestDate: formHarvestDate.value || null,
+    farmName: formFarmName.value || "Chưa xác định",
+    address: formAddress.value || "Chưa xác định",
+    description: formDescription.value || "",
     timestamp: new Date().toISOString(),
-    createdBy: session.currentAccount || "Unknown",
+    createdBy: hashAddress(session.currentAccount) || "Unknown", // 🔒 Hash address for privacy
   };
 
   // Add image to metadata if available
@@ -392,12 +454,24 @@ async function handleCreateBatch() {
   }
 
   // Validate required fields
-  if (!formName.value.trim()) {
-    submitError.value = "Vui lòng nhập tên/ghi chú lô.";
+  if (!formBatchName.value.trim()) {
+    submitError.value = "Vui lòng nhập tên lô hàng.";
     return;
   }
-  if (!formLocation.value.trim()) {
-    submitError.value = "Vui lòng nhập vị trí/địa điểm.";
+  if (!formProductType.value) {
+    submitError.value = "Vui lòng chọn loại sản phẩm.";
+    return;
+  }
+  if (!formHarvestDate.value) {
+    submitError.value = "Vui lòng nhập ngày thu hoạch.";
+    return;
+  }
+  if (!formFarmName.value.trim()) {
+    submitError.value = "Vui lòng nhập tên nông trại/hộ sản xuất.";
+    return;
+  }
+  if (!formAddress.value.trim()) {
+    submitError.value = "Vui lòng nhập địa chỉ.";
     return;
   }
   if (!selectedImage.value) {
@@ -440,11 +514,7 @@ async function handleCreateBatch() {
 
     // STEP 2: Create metadata with image CID
     submitStatus.value = "Đang tạo metadata...";
-    const uri = await createMetadataURI(
-      formName.value.trim(),
-      formLocation.value.trim(),
-      imageCID
-    );
+    const uri = await createMetadataURI(imageCID);
 
     // STEP 3: Get signer contract and call mintBatch()
     submitStatus.value = "Đang gửi giao dịch lên blockchain...";

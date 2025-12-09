@@ -284,7 +284,7 @@ import RoleProductTable from "../components/role/RoleProductTable.vue";
 import { useProductsStore } from "../stores/useProductsStore";
 import { useSessionStore } from "../stores/useSessionStore";
 import { getSignerContract } from "../web3/contractClient";
-import { toLocationHash } from "../utils/helpers";
+import { toLocationHash, hashAddress } from "../utils/helpers";
 import { reloadProductEvents } from "../stores/useProductSync";
 import {
   uploadMetadataToIPFS,
@@ -483,7 +483,7 @@ async function handleAttestWithPDF() {
       certificate: certificateCID,
       certificateName: selectedPDF.value.name,
       certificateSize: selectedPDF.value.size,
-      attestedBy: currentAccount.value,
+      attestedBy: hashAddress(currentAccount.value), // 🔒 Hash address for privacy
       attestedAt: new Date().toISOString(),
     };
 
