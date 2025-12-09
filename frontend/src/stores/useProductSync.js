@@ -4,26 +4,13 @@ import { useProductsStore } from "../stores/useProductsStore";
 import { fetchMetadataFromIPFS } from "../web3/ipfsClient";
 
 /**
- * ✅ ERC721 Product Sync Composable - REFACTORED ARCHITECTURE
+ * ERC721 Product Sync Composable
  *
- * 🏗️ SINGLE SOURCE OF TRUTH: Blockchain events only
- *
- * ARCHITECTURE PRINCIPLES:
- * 1. Product Shell Creation: addProductFromOnChain() creates products with EMPTY events array
- * 2. Event Loading: loadPastEventsFromChain() queries blockchain for ALL events with block timestamps
- * 3. Real-time Listeners: ONLY update product state (status, holder), NO event creation
- * 4. Duplicate Prevention: addEvent() in store handles all duplicate checking
- *
- * FLOW:
- * App Mount → loadProductsFromChain() → Create shells → Query past events → Populate timeline
- * User Action → Contract emits event → Listener updates state → (Event added by next query)
- * Page Refresh → Same flow, duplicate check prevents re-adding events
- *
- * EVENT SOURCES (Ordered by priority):
- * - PRIMARY: loadPastEventsFromChain() with blockchain timestamps (source of truth)
- * - SECONDARY: Real-time listeners for instant UI feedback (state only, no events)
- *
- * CRITICAL: Events are NEVER created with new Date(), always use block.timestamp from blockchain
+ * Architecture: Single Source of Truth (blockchain events only)
+ * - Products created with empty events array
+ * - loadPastEventsFromChain() queries blockchain for timeline (block timestamps)
+ * - Real-time listeners update state only, no event creation
+ * - Duplicate prevention handled by store
  */
 
 let globalListenersAttached = false;
@@ -32,24 +19,13 @@ let globalContract = null;
 async function loadMetadataFromURI(uri) {
   try {
     if (uri.startsWith("ipfs://")) {
-      const metadata = await fetchMetadataFromIPFS(uri);
-      console.log(
-        "[useProductSync] ✅ Fetched metadata from IPFS:",
-        metadata.name
-      );
-      return metadata;
+      return await fetchMetadataFromIPFS(uri);
     }
 
     if (uri.startsWith("local://")) {
       const hash = uri.replace("local://", "");
       const metadataString = localStorage.getItem(`metadata_${hash}`);
-      if (metadataString) {
-        return JSON.parse(metadataString);
-      }
-      console.warn(
-        `[useProductSync] ⚠️ Metadata NOT FOUND in localStorage for ${hash}`
-      );
-      return null;
+      return metadataString ? JSON.parse(metadataString) : null;
     }
 
     if (uri.startsWith("http")) {
@@ -59,11 +35,7 @@ async function loadMetadataFromURI(uri) {
 
     return null;
   } catch (error) {
-    console.warn(
-      "[useProductSync] Failed to load metadata from URI:",
-      uri,
-      error
-    );
+    console.error("[useProductSync] Metadata load failed:", uri, error.message);
     return null;
   }
 }
@@ -111,11 +83,7 @@ export function useProductSync(options = {}) {
     return "STATUS_UPDATED";
   }
 
-  /**
-   * ✅ ERC721: Load all batches from chain
-   * STEP 1: Create product shells with current state
-   * STEP 2: Load ALL events from blockchain to reconstruct timeline
-   */
+  // Load all batches from chain: create shells → query events → populate timeline
   async function loadProductsFromChain() {
     if (!window.ethereum) {
       console.warn(`[${viewName}] MetaMask not found`);
@@ -127,11 +95,9 @@ export function useProductSync(options = {}) {
       const contract = getReadOnlyContract();
       const tokenCounter = await contract.tokenCounter();
 
-      console.log(
-        `[${viewName}] 📦 Total batches on chain: ${tokenCounter.toString()}`
-      );
+      console.log(`[${viewName}] Loading ${tokenCounter} batches...`);
 
-      // STEP 1: Create/update product shells with current blockchain state
+      // Create/update product shells with current blockchain state
       for (let i = 1; i <= Number(tokenCounter); i++) {
         try {
           const owner = await contract.ownerOf(i);
@@ -145,7 +111,6 @@ export function useProductSync(options = {}) {
           const statusName = STATUS_MAP[Number(status)] || "NOT_EXIST";
           const holderRole = getHolderRoleFromStatus(Number(status));
 
-          // ✅ Create or update product shell (NO events yet)
           productsStore.addProductFromOnChain({
             id: i,
             name,
@@ -167,10 +132,11 @@ export function useProductSync(options = {}) {
         }
       }
 
-      // STEP 2: Load ALL events from blockchain to reconstruct complete timeline
-      console.log(`[${viewName}] 🔄 Loading ALL events from blockchain...`);
+      // Load ALL events from blockchain to reconstruct complete timeline
       await loadPastEventsFromChain(contract, Number(tokenCounter));
-      console.log(`[${viewName}] ✅ Products and events loaded successfully`);
+      console.log(
+        `[${viewName}] ✅ Loaded ${tokenCounter} products with events`
+      );
     } catch (error) {
       console.error(`[${viewName}] Error loading batches:`, error);
     } finally {
@@ -178,19 +144,11 @@ export function useProductSync(options = {}) {
     }
   }
 
-  /**
-   * 🆕 Load past events from blockchain to reconstruct timeline
-   * This ensures events are synced across browsers/sessions
-   */
+  // Load past events from blockchain to reconstruct timeline (synced across browsers)
   async function loadPastEventsFromChain(contract, maxBatchId) {
     try {
-      // Get all past events (last 10000 blocks or from deployment)
       const currentBlock = await contract.runner.provider.getBlockNumber();
       const fromBlock = Math.max(0, currentBlock - 10000);
-
-      console.log(
-        `[${viewName}] Querying events from block ${fromBlock} to ${currentBlock}`
-      );
 
       // Query all event types
       const [
@@ -227,18 +185,7 @@ export function useProductSync(options = {}) {
         ),
       ]);
 
-      console.log(`[${viewName}] Found events:`, {
-        minted: mintedEvents.length,
-        inspected: inspectedEvents.length,
-        status: statusEvents.length,
-        recalled: recalledEvents.length,
-        transfer: transferEvents.length,
-      });
-
       // Process BatchMinted events
-      console.log(
-        `[loadPastEvents] Processing ${mintedEvents.length} BatchMinted events...`
-      );
       for (const event of mintedEvents) {
         const batchId = Number(event.args.batchId);
         const product = productsStore.getById(batchId);
@@ -247,7 +194,6 @@ export function useProductSync(options = {}) {
         const block = await event.getBlock();
         const farmer = event.args.farmer.toLowerCase();
 
-        // ✅ addEvent() handles duplicate check internally
         productsStore.addEvent(batchId, {
           type: "REGISTERED",
           actor: farmer,
@@ -255,10 +201,9 @@ export function useProductSync(options = {}) {
           statusTo: "HARVESTED",
           location: product.metadata?.location || "",
         });
-      } // Process BatchInspected events
-      console.log(
-        `[loadPastEvents] Processing ${inspectedEvents.length} BatchInspected events...`
-      );
+      }
+
+      // Process BatchInspected events
       for (const event of inspectedEvents) {
         const batchId = Number(event.args.batchId);
         const product = productsStore.getById(batchId);
@@ -277,9 +222,6 @@ export function useProductSync(options = {}) {
       }
 
       // Process StatusUpdated events
-      console.log(
-        `[loadPastEvents] Processing ${statusEvents.length} StatusUpdated events...`
-      );
       for (const event of statusEvents) {
         const batchId = Number(event.args.batchId);
         const product = productsStore.getById(batchId);
@@ -304,9 +246,6 @@ export function useProductSync(options = {}) {
       }
 
       // Process Transfer events (ERC721)
-      console.log(
-        `[loadPastEvents] Processing ${transferEvents.length} Transfer events...`
-      );
       for (const event of transferEvents) {
         const tokenId = Number(event.args.tokenId);
         const product = productsStore.getById(tokenId);
@@ -330,9 +269,6 @@ export function useProductSync(options = {}) {
       }
 
       // Process BatchRecalled events
-      console.log(
-        `[loadPastEvents] Processing ${recalledEvents.length} BatchRecalled events...`
-      );
       for (const event of recalledEvents) {
         const batchId = Number(event.args.batchId);
         const product = productsStore.getById(batchId);
@@ -349,30 +285,23 @@ export function useProductSync(options = {}) {
           location: "Product recalled by admin",
         });
       }
-
-      console.log(`[${viewName}] ✅ Past events loaded and reconstructed`);
     } catch (error) {
       console.error(`[${viewName}] Error loading past events:`, error);
     }
   }
 
-  /**
-   * ✅ ERC721: Event Listeners
-   */
+  // Attach event listeners for real-time updates (state only, no event creation)
   function listenToContractEvents(contract) {
-    console.log(`[${viewName}] 🎧 Attaching event listeners...`);
-
-    // ✅ BatchMinted: New batch created
+    // BatchMinted: New batch created
     contract.on("BatchMinted", async (batchId, farmer, event) => {
-      console.log(`[${viewName}] 📢 BatchMinted: ${batchId} by ${farmer}`);
+      console.log(`[${viewName}] BatchMinted: ${batchId}`);
 
       try {
         const uri = await contract.tokenURI(batchId);
         const metadata = await loadMetadataFromURI(uri);
         const name = metadata?.name || `Lô #${batchId}`;
 
-        // ✅ Only create/update product shell - NO event creation
-        // Past events query will add REGISTERED event with blockchain timestamp
+        // Create product shell only - events added by blockchain query
         productsStore.addProductFromOnChain({
           id: Number(batchId),
           name,
@@ -397,20 +326,20 @@ export function useProductSync(options = {}) {
       }
     });
 
-    // ✅ Transfer: Ownership change (drives state transitions)
+    // Transfer: Ownership change (drives state transitions)
     contract.on("Transfer", async (from, to, tokenId, event) => {
       console.log(
-        `[${viewName}] 📢 Transfer: ${tokenId} from ${from} to ${to}`
+        `[${viewName}] Transfer: ${tokenId} from ${from.slice(
+          0,
+          6
+        )}... to ${to.slice(0, 6)}...`
       );
 
       const product = productsStore.getById(Number(tokenId));
-      if (!product) {
-        console.warn(`[${viewName}] Product ${tokenId} not found in store`);
-        return;
-      }
+      if (!product) return;
 
       try {
-        // ✅ Only update product state - NO event creation
+        // Update product state only
         product.currentHolderAddress = to.toLowerCase();
         const status = await contract.getBatchStatus(tokenId);
         const statusName = STATUS_MAP[Number(status)];
@@ -427,17 +356,15 @@ export function useProductSync(options = {}) {
       }
     });
 
-    // ✅ BatchInspected: Inspector attestation
+    // BatchInspected: Inspector attestation
     contract.on("BatchInspected", async (batchId, inspector, event) => {
-      console.log(
-        `[${viewName}] 📢 BatchInspected: ${batchId} by ${inspector}`
-      );
+      console.log(`[${viewName}] BatchInspected: ${batchId}`);
 
       const product = productsStore.getById(Number(batchId));
       if (!product) return;
 
       try {
-        // ✅ Only update product state - NO event creation
+        // Update product state only
         product.status = "INSPECTING";
         product.currentHolderRole = "FARMER";
 
@@ -452,19 +379,19 @@ export function useProductSync(options = {}) {
       }
     });
 
-    // ✅ StatusUpdated: Generic status change
+    // StatusUpdated: Generic status change
     contract.on(
       "StatusUpdated",
       async (batchId, updater, oldStatus, newStatus, event) => {
         console.log(
-          `[${viewName}] 📢 StatusUpdated: ${batchId} ${oldStatus}→${newStatus} by ${updater}`
+          `[${viewName}] StatusUpdated: ${batchId} (${oldStatus}→${newStatus})`
         );
 
         const product = productsStore.getById(Number(batchId));
         if (!product) return;
 
         try {
-          // ✅ Only update product state - NO event creation
+          // Update product state only
           const statusName = STATUS_MAP[Number(newStatus)];
           const holderRole = getHolderRoleFromStatus(Number(newStatus));
 
@@ -480,17 +407,15 @@ export function useProductSync(options = {}) {
       }
     );
 
-    // ✅ BatchRecalled: Admin recall
+    // BatchRecalled: Admin recall
     contract.on("BatchRecalled", async (batchId, caller, reasonHash, event) => {
-      console.log(
-        `[${viewName}] 📢 BatchRecalled: ${batchId} by ${caller}, reason: ${reasonHash}`
-      );
+      console.log(`[${viewName}] BatchRecalled: ${batchId}`);
 
       const product = productsStore.getById(Number(batchId));
       if (!product) return;
 
       try {
-        // ✅ Only update product state - NO event creation
+        // Update product state only
         product.status = "RECALLED";
         product.currentHolderRole = "FARMER";
 
@@ -505,19 +430,17 @@ export function useProductSync(options = {}) {
       }
     });
 
-    // ✅ BatchArchived: Final state (to ARCHIVE_VAULT)
+    // BatchArchived: Final state (to ARCHIVE_VAULT)
     contract.on(
       "BatchArchived",
       async (batchId, caller, archiveWallet, event) => {
-        console.log(
-          `[${viewName}] 📢 BatchArchived: ${batchId} to ${archiveWallet}`
-        );
+        console.log(`[${viewName}] BatchArchived: ${batchId}`);
 
         const product = productsStore.getById(Number(batchId));
         if (!product) return;
 
         try {
-          // ✅ Only update product state - NO event creation
+          // Update product state only
           product.status = "CONSUMED";
           product.currentHolderAddress = archiveWallet.toLowerCase();
         } catch (error) {
@@ -525,32 +448,22 @@ export function useProductSync(options = {}) {
         }
       }
     );
-
-    console.log(`[${viewName}] ✅ Event listeners attached`);
   }
 
   function attachGlobalEventListeners() {
-    if (globalListenersAttached) {
-      console.log(
-        `[${viewName}] ⚠️ Global listeners already attached, skipping`
-      );
-      return;
-    }
+    if (globalListenersAttached) return;
 
     try {
       const contract = getReadOnlyContract();
       globalContract = contract;
       listenToContractEvents(contract);
       globalListenersAttached = true;
-      console.log(`[${viewName}] ✅ Global listeners attached successfully`);
     } catch (error) {
       console.error(`[${viewName}] Error attaching global listeners:`, error);
     }
   }
 
   function cleanup() {
-    console.log(`[${viewName}] 🧹 Cleaning up event listeners...`);
-
     if (globalContract) {
       globalContract.removeAllListeners("BatchMinted");
       globalContract.removeAllListeners("Transfer");
@@ -565,12 +478,11 @@ export function useProductSync(options = {}) {
   }
 
   onMounted(() => {
-    console.log(`[${viewName}] 🚀 Mounting useProductSync...`);
     attachGlobalEventListeners();
   });
 
   onUnmounted(() => {
-    console.log(`[${viewName}] 💤 Unmounting useProductSync...`);
+    // Listeners kept globally, cleanup if needed
   });
 
   return {
@@ -581,27 +493,17 @@ export function useProductSync(options = {}) {
 }
 
 /**
- * 🆕 Reload events for a specific product from blockchain
- * Use after manual operations (attest, transfer, etc.) to sync timeline
- *
- * This queries recent blockchain events and adds them with proper timestamps
+ * Reload events for a specific product from blockchain
+ * Use after manual operations (attest, transfer) to sync timeline
  */
 export async function reloadProductEvents(productId) {
   try {
     const contract = getReadOnlyContract();
     const productsStore = useProductsStore();
     const product = productsStore.getById(productId);
+    if (!product) return;
 
-    if (!product) {
-      console.warn(`[reloadProductEvents] Product ${productId} not found`);
-      return;
-    }
-
-    console.log(
-      `[reloadProductEvents] 🔄 Reloading events for product ${productId}...`
-    );
-
-    // Query recent events for this product (last 1000 blocks)
+    // Query recent events (last 1000 blocks)
     const currentBlock = await contract.runner.provider.getBlockNumber();
     const fromBlock = Math.max(0, currentBlock - 1000);
 
@@ -631,18 +533,7 @@ export async function reloadProductEvents(productId) {
       ),
     ]);
 
-    console.log(
-      `[reloadProductEvents] Found ${
-        mintedEvents.length +
-        inspectedEvents.length +
-        statusEvents.length +
-        transferEvents.length +
-        recalledEvents.length
-      } events`
-    );
-
-    // Process all event types with blockchain timestamps
-    // addEvent() will skip duplicates automatically
+    // Process all event types with blockchain timestamps (addEvent() handles duplicates)
 
     for (const event of mintedEvents) {
       const block = await event.getBlock();
@@ -718,11 +609,7 @@ export async function reloadProductEvents(productId) {
         location: "Product recalled by admin",
       });
     }
-
-    console.log(
-      `[reloadProductEvents] ✅ Events reloaded for product ${productId}`
-    );
   } catch (error) {
-    console.error(`[reloadProductEvents] Error:`, error);
+    console.error("[reloadProductEvents] Error:", error);
   }
 }
