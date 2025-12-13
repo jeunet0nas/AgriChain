@@ -37,7 +37,7 @@
       <RoleProductTable
         :products="farmerInspectingProducts"
         title="Lô đã được kiểm định, chờ gửi đi"
-        subtitle="Lọc theo địa chỉ ví + status = INSPECTING"
+        subtitle="Lọc theo địa chỉ ví"
         empty-message="Bạn chưa có lô nào ở trạng thái INSPECTING."
       >
         <template #actions="{ product }">
@@ -55,7 +55,7 @@
       <RoleProductTable
         :products="recalledFarmerProducts"
         title="Lô bị thu hồi đang giữ"
-        subtitle="Lọc theo địa chỉ ví + status = RECALLED"
+        subtitle="Sản phẩm đang trong trạng thái thu hồi"
         empty-message="Bạn chưa có lô RECALLED nào cần xử lý."
       >
         <template #extraColHeader> Xử lý thu hồi </template>

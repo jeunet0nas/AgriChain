@@ -212,7 +212,7 @@ defineEmits(["close", "download", "retry"]);
 const modalTitle = computed(() => {
   if (!props.product) return "";
   return props.type === "image"
-    ? `Ảnh sản phẩm #${props.product.id}`
+    ? `Ảnh chứng từ nguồn gốc cho #${props.product.id}`
     : `Chứng chỉ kiểm định #${props.product.id}`;
 });
 

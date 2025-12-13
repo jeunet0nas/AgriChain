@@ -129,7 +129,7 @@ function onSearchAnother(idNum) {
   }
 
   if (!exists(parsedId)) {
-    searchError.value = `Không tìm thấy ID ${parsedId} trên blockchain.`;
+    searchError.value = `Không tìm thấy lô hàng với mã ${parsedId} trên blockchain.`;
     return;
   }
 
