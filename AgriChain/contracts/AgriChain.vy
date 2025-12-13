@@ -411,16 +411,20 @@ def mintBatch(_uri: String[256]) -> uint256:
 
 
 @external
-def markBatchInspected(_batchId: uint256):
+def markBatchInspected(_batchId: uint256, _newURI: String[256]):
     """
-    Inspector attests a batch:
-    HARVESTED -> INSPECTING
-
+    Inspector attests a batch AND updates URI in one transaction:
+    HARVESTED -> INSPECTING + Update URI with certificate
+    
+    This combines attestation with metadata update to save gas and improve UX.
+    
     Additional constraints:
-    - Batch must still be held by a farmer wallet.
+    - Batch must still be held by a farmer wallet
+    - New URI required (should contain inspection certificate)
     """
     self._checkExists(_batchId)
     self._checkRole(INSPECTOR_ROLE, msg.sender)
+    assert len(_newURI) > 0, "New URI required for attestation"
 
     _currentStatus: uint256 = self.batchStatus[_batchId]
     assert _currentStatus == HARVESTED, "Must be in HARVESTED state"
@@ -428,9 +432,14 @@ def markBatchInspected(_batchId: uint256):
     owner: address = self.tokenOwner[_batchId]
     assert self.roles[FARMER_ROLE][owner], "Batch must be held by a farmer"
 
+    # Update status
     self.batchStatus[_batchId] = INSPECTING
     log StatusUpdated(_batchId, msg.sender, HARVESTED, INSPECTING)
     log BatchInspected(_batchId, msg.sender)
+    
+    # Update URI with inspection certificate
+    self.tokenURIs[_batchId] = _newURI
+    log URI(_newURI, _batchId)
 
 
 @external

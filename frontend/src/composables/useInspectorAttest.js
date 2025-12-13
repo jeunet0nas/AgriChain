@@ -229,24 +229,21 @@ export function useInspectorAttest() {
 
       const contract = await getSignerContract();
 
-      // 3a. Update batch URI on-chain
-      console.log("[useInspectorAttest] 📝 Updating batch URI...");
-      const txUpdateURI = await contract.updateBatchURI(
+      // Mark batch inspected + update URI in one transaction (saves gas!)
+      console.log("[useInspectorAttest] 📝 Attesting batch with new URI...");
+      modalAttestSuccess.value = "Đang gửi transaction attest...";
+
+      const tx = await contract.markBatchInspected(
         selectedProduct.value.id,
         newMetadataURI
       );
-      modalAttestSuccess.value = "Đang cập nhật metadata on-chain...";
-      await txUpdateURI.wait();
-      console.log("[useInspectorAttest] ✅ Batch URI updated on-chain");
-
-      // 3b. Mark batch inspected (changes status to INSPECTING)
-      modalAttestSuccess.value = "Đang gửi transaction attest...";
-      const tx = await contract.markBatchInspected(selectedProduct.value.id);
 
       modalAttestSuccess.value = "Đang chờ transaction được xác nhận...";
       await tx.wait();
 
-      console.log("[useInspectorAttest] ✅ Batch marked inspected on-chain");
+      console.log(
+        "[useInspectorAttest] ✅ Batch marked inspected + URI updated on-chain (1 TX saved gas!)"
+      );
 
       // STEP 4: Update local store
       const actor = session.currentAccount || "0xINSPECTOR";

@@ -1,78 +1,94 @@
 <template>
   <section class="space-y-6">
-    <div class="space-y-2">
-      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
-        BẢNG ĐIỀU KHIỂN
-      </h2>
+    <!-- Nếu không có quyền Logistics -->
+    <div
+      v-if="!roles.LOGISTICS"
+      class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800"
+    >
+      Bạn chưa có quyền truy cập vai trò <strong>Logistics</strong>. Hãy kết nối
+      ví có role phù hợp hoặc nhờ Admin cấp quyền.
     </div>
 
-    <!-- Lô đang vận chuyển (IN_TRANSIT) -->
-    <RoleProductTable
-      :products="transitProducts"
-      title="Lô đang vận chuyển (IN_TRANSIT)"
-      subtitle="Lọc theo địa chỉ ví đang đăng nhập + status = IN_TRANSIT"
-      empty-message="Bạn chưa sở hữu lô nào đang vận chuyển."
-    >
-      <template #actions="{ product }">
-        <button
-          type="button"
-          class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
-          @click="openDeliverModal(product)"
-        >
-          Giao cho nhà bán lẻ
-        </button>
-      </template>
-    </RoleProductTable>
+    <!-- Nội dung chính cho Logistics -->
+    <div v-else class="space-y-6">
+      <div class="space-y-2">
+        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+          Bảng điều khiển Vận chuyển (Logistics)
+        </h2>
+        <p class="text-sm text-slate-600 max-w-2xl">
+          Quản lý các lô đang vận chuyển, giao hàng cho nhà bán lẻ và xử lý các
+          lô bị thu hồi.
+        </p>
+      </div>
 
-    <!-- Lô bị thu hồi do LOGISTICS giữ -->
-    <RoleProductTable
-      :products="recalledLogisticsProducts"
-      title="Lô bị thu hồi đang giữ"
-      subtitle="Lọc theo địa chỉ ví đang đăng nhập + status = RECALLED"
-      empty-message="Bạn chưa sở hữu lô RECALLED nào."
-    >
-      <template #extraColHeader> Xử lý thu hồi </template>
+      <!-- Lô đang vận chuyển (IN_TRANSIT) -->
+      <RoleProductTable
+        :products="transitProducts"
+        title="Lô đang vận chuyển (IN_TRANSIT)"
+        subtitle="Lọc theo địa chỉ ví đang đăng nhập + status = IN_TRANSIT"
+        empty-message="Bạn chưa sở hữu lô nào đang vận chuyển."
+      >
+        <template #actions="{ product }">
+          <button
+            type="button"
+            class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+            @click="openDeliverModal(product)"
+          >
+            Giao cho nhà bán lẻ
+          </button>
+        </template>
+      </RoleProductTable>
 
-      <template #extraCol="{ product }">
-        <span
-          v-if="
-            product.logisticsQuarantineSent ||
-            product.currentHolderRole === 'QUARANTINE'
-          "
-          class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-100"
-        >
-          Đã gửi về kho cách ly
-        </span>
-        <span
-          v-else
-          class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-100"
-        >
-          Chưa gửi (đang giữ)
-        </span>
-      </template>
+      <!-- Lô bị thu hồi do LOGISTICS giữ -->
+      <RoleProductTable
+        :products="recalledLogisticsProducts"
+        title="Lô bị thu hồi đang giữ"
+        subtitle="Lọc theo địa chỉ ví đang đăng nhập + status = RECALLED"
+        empty-message="Bạn chưa sở hữu lô RECALLED nào."
+      >
+        <template #extraColHeader> Xử lý thu hồi </template>
 
-      <template #actions="{ product }">
-        <button
-          type="button"
-          class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-800 hover:bg-amber-100 disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
-          :disabled="
-            product.logisticsQuarantineSent ||
-            product.currentHolderRole === 'QUARANTINE'
-          "
-          @click="sendLogisticsRecalledToQuarantine(product)"
-        >
+        <template #extraCol="{ product }">
           <span
             v-if="
               product.logisticsQuarantineSent ||
               product.currentHolderRole === 'QUARANTINE'
             "
+            class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-100"
           >
             Đã gửi về kho cách ly
           </span>
-          <span v-else> Gửi về kho cách ly </span>
-        </button>
-      </template>
-    </RoleProductTable>
+          <span
+            v-else
+            class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-100"
+          >
+            Chưa gửi (đang giữ)
+          </span>
+        </template>
+
+        <template #actions="{ product }">
+          <button
+            type="button"
+            class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-800 hover:bg-amber-100 disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+            :disabled="
+              product.logisticsQuarantineSent ||
+              product.currentHolderRole === 'QUARANTINE'
+            "
+            @click="sendLogisticsRecalledToQuarantine(product)"
+          >
+            <span
+              v-if="
+                product.logisticsQuarantineSent ||
+                product.currentHolderRole === 'QUARANTINE'
+              "
+            >
+              Đã gửi về kho cách ly
+            </span>
+            <span v-else> Gửi về kho cách ly </span>
+          </button>
+        </template>
+      </RoleProductTable>
+    </div>
 
     <!-- Modal gửi cho retailer -->
     <SendProductModal
@@ -102,6 +118,8 @@ import SendProductModal from "../components/shared/SendProductModal.vue";
 
 const productsStore = useProductsStore();
 const sessionStore = useSessionStore();
+
+const roles = computed(() => sessionStore.roles);
 
 // Use composables
 const { myProducts } = useProductFilters();

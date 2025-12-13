@@ -312,6 +312,10 @@ export const CONTRACT_ABI = [
         name: "_batchId",
         type: "uint256",
       },
+      {
+        name: "_newURI",
+        type: "string",
+      },
     ],
     outputs: [],
   },

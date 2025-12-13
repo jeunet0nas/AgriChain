@@ -391,6 +391,12 @@
         "type": "uint256",
         "components": null,
         "internal_type": null
+      },
+      {
+        "name": "_newURI",
+        "type": "string",
+        "components": null,
+        "internal_type": null
       }
     ],
     "outputs": []
