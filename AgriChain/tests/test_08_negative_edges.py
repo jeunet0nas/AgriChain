@@ -13,7 +13,7 @@ def test_cannot_mint_without_farmer_role(contract, admin, logistics):
 def test_cannot_inspect_nonexistent_batch(deployed_contract, inspector):
     """Cannot inspect batch that doesn't exist"""
     with pytest.raises(ContractLogicError, match="Unknown batch"):
-        deployed_contract.markBatchInspected(999, sender=inspector)
+        deployed_contract.markBatchInspected(999, "ipfs://test/inspected.json", sender=inspector)
 
 
 def test_cannot_transfer_nonexistent_batch(deployed_contract, farmer, logistics):
@@ -106,7 +106,7 @@ def test_transfer_from_wrong_owner_reverts(deployed_contract, farmer, inspector,
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     # Logistics tries to transfer from farmer without approval
     with pytest.raises(ContractLogicError, match="Not owner nor approved"):
@@ -118,7 +118,7 @@ def test_cleared_approval_after_transfer(deployed_contract, farmer, inspector, l
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     # Approve inspector
     sc.approve(inspector, batch_id, sender=farmer)
@@ -140,11 +140,11 @@ def test_operator_approval_persists_after_transfer(deployed_contract, farmer, in
     # Farmer mints 2 batches
     sc.mintBatch("ipfs://a", sender=farmer)
     batch_a = sc.tokenCounter()
-    sc.markBatchInspected(batch_a, sender=inspector)
+    sc.markBatchInspected(batch_a, "ipfs://a/inspected.json", sender=inspector)
     
     sc.mintBatch("ipfs://b", sender=farmer)
     batch_b = sc.tokenCounter()
-    sc.markBatchInspected(batch_b, sender=inspector)
+    sc.markBatchInspected(batch_b, "ipfs://b/inspected.json", sender=inspector)
     
     # Farmer sets inspector as operator
     sc.setApprovalForAll(inspector, True, sender=farmer)

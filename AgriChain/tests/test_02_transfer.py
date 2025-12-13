@@ -12,7 +12,7 @@ def _mint_only(deployed_contract, farmer):
 def _mint_and_attest(deployed_contract, farmer, inspector):
     """Mint and mark inspected -> INSPECTING state"""
     batch_id = _mint_only(deployed_contract, farmer)
-    deployed_contract.markBatchInspected(batch_id, sender=inspector)
+    deployed_contract.markBatchInspected(batch_id, "ipfs://cid-demo/inspected.json", sender=inspector)
     return batch_id
 
 

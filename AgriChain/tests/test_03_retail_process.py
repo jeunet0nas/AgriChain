@@ -7,7 +7,7 @@ def _mint_attest_and_to_retailer(sc, farmer, inspector, logistics, retailer):
     sc.mintBatch("ipfs://cid-demo/meta.json", sender=farmer)
     batch_id = sc.tokenCounter()
 
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://cid-demo/inspected.json", sender=inspector)
     sc.transferFrom(farmer, logistics, batch_id, sender=farmer)
     sc.transferFrom(logistics, retailer, batch_id, sender=logistics)
 
@@ -108,7 +108,7 @@ def test_advance_invalid_states_revert(deployed_contract, farmer, inspector, log
     # Case A: INSPECTING (not yet to retailer) -> retailer doesn't hold it
     sc.mintBatch("ipfs://cid-demo/meta.json", sender=farmer)
     batch_a = sc.tokenCounter()
-    sc.markBatchInspected(batch_a, sender=inspector)
+    sc.markBatchInspected(batch_a, "ipfs://cid-demo/inspected.json", sender=inspector)
     
     with pytest.raises(ContractLogicError, match="Not current holder"):
         sc.advanceBatchRetailStatus(batch_a, sender=retailer)
