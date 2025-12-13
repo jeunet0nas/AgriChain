@@ -27,7 +27,7 @@
     <!-- Lô bị thu hồi do LOGISTICS giữ -->
     <RoleProductTable
       :products="recalledLogisticsProducts"
-      title="Lô bị thu hồi đang do đơn vị vận chuyển giữ (RECALLED)"
+      title="Lô bị thu hồi đang giữ"
       subtitle="Lọc theo địa chỉ ví đang đăng nhập + status = RECALLED"
       empty-message="Bạn chưa sở hữu lô RECALLED nào."
     >
@@ -69,7 +69,7 @@
           >
             Đã gửi về kho cách ly
           </span>
-          <span v-else> Gửi về kho cách ly (demo) </span>
+          <span v-else> Gửi về kho cách ly </span>
         </button>
       </template>
     </RoleProductTable>
@@ -92,48 +92,36 @@
 
 <script setup>
 import { computed, ref } from "vue";
-import { ethers } from "ethers";
 import { useProductsStore } from "../stores/useProductsStore";
 import { useSessionStore } from "../stores/useSessionStore";
-import { getSignerContract } from "../web3/contractClient";
+import { useProductFilters } from "../composables/useProductFilters";
+import { useTokenTransfer } from "../composables/useTokenTransfer";
+import { useQuarantineTransfer } from "../composables/useQuarantineTransfer";
 import RoleProductTable from "../components/role/RoleProductTable.vue";
 import SendProductModal from "../components/shared/SendProductModal.vue";
 
 const productsStore = useProductsStore();
 const sessionStore = useSessionStore();
 
-const { products, updateStatus, getById, addEvent } = productsStore;
-// 👇 SỬA: Không destructure currentAccount, dùng trực tiếp từ store để giữ reactivity
+// Use composables
+const { myProducts } = useProductFilters();
+const { transferToken } = useTokenTransfer();
+const { sendToQuarantine } = useQuarantineTransfer();
 
-// --- state cho modal ---
+// Modal state
 const showDeliverModal = ref(false);
 const selectedProduct = ref(null);
 
-// Các lô IN_TRANSIT do LOGISTICS đang giữ (lọc theo địa chỉ ví)
-const transitProducts = computed(() => {
-  if (!sessionStore.currentAccount) return [];
-  return products.filter((p) => {
-    const isMyProduct =
-      p.currentHolderAddress?.toLowerCase() ===
-      sessionStore.currentAccount.toLowerCase();
-    const isTransit = p.status === "IN_TRANSIT";
-    return isMyProduct && isTransit;
-  });
-});
+// Product filters - lọc lô do Logistics đang giữ
+const transitProducts = computed(() =>
+  myProducts.value.filter((p) => p.status === "IN_TRANSIT")
+);
 
-// Các lô RECALLED do LOGISTICS giữ (lọc theo địa chỉ ví)
-const recalledLogisticsProducts = computed(() => {
-  if (!sessionStore.currentAccount) return [];
-  return products.filter((p) => {
-    const isMyProduct =
-      p.currentHolderAddress?.toLowerCase() ===
-      sessionStore.currentAccount.toLowerCase();
-    const isRecalled = p.status === "RECALLED";
-    return isMyProduct && isRecalled;
-  });
-});
+const recalledLogisticsProducts = computed(() =>
+  myProducts.value.filter((p) => p.status === "RECALLED")
+);
 
-// 👇 Modal handlers
+// Modal handlers
 function openDeliverModal(product) {
   selectedProduct.value = product;
   showDeliverModal.value = true;
@@ -144,128 +132,18 @@ function closeDeliverModal() {
   selectedProduct.value = null;
 }
 
-// 👇 Xử lý khi modal emit success - gửi lô cho retailer
+// Handle transfer to retailer
 async function handleDeliverSuccess({ product, recipientAddress }) {
   try {
-    // 0. Kiểm tra wallet đã kết nối chưa
-    if (!sessionStore.currentAccount) {
-      console.error("[LogisticsView] Wallet not connected");
-      alert("Vui lòng kết nối ví MetaMask trước khi thực hiện giao dịch.");
-      return;
-    }
-
-    const contract = await getSignerContract();
-
-    // 1. ERC721: Check ownership
-    const fromAddress = sessionStore.currentAccount;
-    const owner = await contract.ownerOf(product.id);
-
-    if (owner.toLowerCase() !== fromAddress.toLowerCase()) {
-      console.error("[LogisticsView] You don't own this batch");
-      alert(`Bạn không sở hữu lô #${product.id}. Không thể chuyển giao.`);
-      return;
-    }
-
-    // 2. ERC721: transferFrom (no amount, no data)
-    const tx = await contract.transferFrom(
-      fromAddress,
-      recipientAddress,
-      product.id
-    );
-    console.log("[LogisticsView] sending tx transferFrom:", tx.hash);
-    await tx.wait();
-
-    // 3. Cập nhật store (tắt auto-add event để tránh duplicate với blockchain event)
-    const actor = fromAddress || "0xLOGI...DEMO";
-    const timestamp = new Date().toISOString();
-
-    updateStatus(product.id, "DELIVERED", {
-      actor,
-      locationHash: undefined,
-      timestamp,
-      currentHolderRole: "RETAILER",
-      currentHolderAddress: recipientAddress,
-      addEvent: false, // Tắt auto-add, để blockchain event tự add
-    });
-
-    // 4. Đóng modal
+    await transferToken(product, recipientAddress, "DELIVERED", "RETAILER");
     closeDeliverModal();
-
-    console.log("[LogisticsView] Transfer to retailer success!");
-  } catch (e) {
-    console.error("[LogisticsView] handleDeliverSuccess error:", e);
-    // Lỗi sẽ được xử lý ở modal nếu cần
+  } catch (error) {
+    console.error("[LogisticsView] Transfer to retailer failed:", error);
   }
 }
 
-// IN_TRANSIT (holder = LOGISTICS) -> DELIVERED (holder = RETAILER) - LEGACY DEMO FUNCTION
-// Giữ lại để tương thích với code cũ, nhưng nên dùng modal thay thế
-function deliverToRetailer(p) {
-  if (!p || p.status !== "IN_TRANSIT" || p.currentHolderRole !== "LOGISTICS")
-    return;
-
-  const actor = sessionStore.currentAccount || "0xLOGI...DEMO";
-  const locationHash = "0xloc_delivered_demo";
-  const timestamp = new Date().toISOString();
-
-  updateStatus(p.id, "DELIVERED", {
-    actor,
-    locationHash,
-    timestamp,
-    currentHolderRole: "RETAILER",
-    currentHolderAddress: "0xRETAILER...DEMO",
-  });
-}
-
-// RECALLED (holder = LOGISTICS) -> gửi về QUARANTINE_VAULT (on-chain)
-async function sendLogisticsRecalledToQuarantine(p) {
-  if (!p || p.status !== "RECALLED" || p.currentHolderRole !== "LOGISTICS")
-    return;
-
-  if (!sessionStore.currentAccount) {
-    alert("Vui lòng kết nối ví MetaMask.");
-    return;
-  }
-
-  try {
-    console.log(
-      `[LogisticsView] Sending RECALLED product ${p.id} to QUARANTINE_VAULT`
-    );
-
-    const contract = await getSignerContract();
-    const fromAddress = sessionStore.currentAccount;
-    const QUARANTINE_VAULT = "0x000000000000000000000000000000000000dEaD";
-
-    // ERC721: Check ownership
-    const owner = await contract.ownerOf(p.id);
-
-    if (owner.toLowerCase() !== fromAddress.toLowerCase()) {
-      alert(`Bạn không sở hữu lô #${p.id}`);
-      return;
-    }
-
-    // ERC721: Transfer to QUARANTINE_VAULT (no amount, no data)
-    const tx = await contract.transferFrom(fromAddress, QUARANTINE_VAULT, p.id);
-
-    console.log(`[LogisticsView] Quarantine transaction sent:`, tx.hash);
-    await tx.wait();
-    console.log(
-      `[LogisticsView] ✅ Product ${p.id} sent to quarantine successfully`
-    );
-
-    // Update store
-    const product = getById(p.id);
-    if (product) {
-      product.currentHolderRole = "QUARANTINE";
-      product.currentHolderAddress = QUARANTINE_VAULT;
-      product.logisticsQuarantineSent = true;
-    }
-  } catch (e) {
-    console.error(
-      `[LogisticsView] sendLogisticsRecalledToQuarantine error:`,
-      e
-    );
-    alert(`Lỗi: ${e.message || "Không thể gửi về kho cách ly"}`);
-  }
+// Send recalled product to quarantine
+async function sendLogisticsRecalledToQuarantine(product) {
+  await sendToQuarantine(product, "logisticsQuarantineSent");
 }
 </script>

@@ -25,7 +25,7 @@
     <RoleProductTable
       :products="recallableProducts"
       title="Lô có thể thu hồi"
-      subtitle="Mọi trạng thái ngoại trừ CONSUMED và RECALLED."
+      subtitle="Chọn lô hàng thu hồi"
       empty-message="Hiện chưa có lô nào phù hợp điều kiện thu hồi."
     >
       <template #actions="{ product }">
@@ -74,18 +74,18 @@
           disabled
         >
           <span v-if="product.currentHolderRole === 'QUARANTINE'">
-            ✅ Đã gửi về kho cách ly
+            Đã gửi về kho
           </span>
           <span v-else-if="product.currentHolderRole === 'FARMER'">
-            ⏳ Chờ Farmer gửi về quarantine
+            Chờ Farmer gửi về kho
           </span>
           <span v-else-if="product.currentHolderRole === 'LOGISTICS'">
-            ⏳ Chờ Logistics gửi về quarantine
+            Chờ Logistics gửi về
           </span>
           <span v-else-if="product.currentHolderRole === 'RETAILER'">
-            ⏳ Chờ Retailer gửi về quarantine
+            Chờ Retailer gửi về
           </span>
-          <span v-else> ⏳ Chờ holder gửi về quarantine </span>
+          <span v-else> Chờ holder gửi về kho </span>
         </button>
       </template>
     </RoleProductTable>

@@ -71,14 +71,23 @@ export function useProductSync(options = {}) {
     return null; // Not a special vault
   }
 
-  function getHolderRoleFromStatus(statusNum, ownerAddress = null) {
+  function getHolderRoleFromStatus(
+    statusNum,
+    ownerAddress = null,
+    currentRole = null
+  ) {
     // Check special vault addresses first
     if (ownerAddress) {
       const vaultRole = getHolderRoleFromAddress(ownerAddress);
       if (vaultRole) return vaultRole;
     }
 
-    // Status-based role mapping
+    // RECALLED: Preserve current holder's role (product stays with current role holder until transferred)
+    if (statusNum === 7 && currentRole) {
+      return currentRole;
+    }
+
+    // Status-based role mapping (for non-RECALLED states)
     const map = {
       1: "FARMER",
       2: "FARMER",
@@ -86,7 +95,7 @@ export function useProductSync(options = {}) {
       4: "RETAILER",
       5: "RETAILER",
       6: "CONSUMER",
-      7: "FARMER",
+      7: "FARMER", // Fallback if no currentRole provided
     };
     return map[statusNum] || "UNKNOWN";
   }
@@ -127,7 +136,13 @@ export function useProductSync(options = {}) {
           const metadata = await loadMetadataFromURI(uri);
           const name = metadata?.name || `Lô #${i}`;
           const statusName = STATUS_MAP[Number(status)] || "NOT_EXIST";
-          const holderRole = getHolderRoleFromStatus(Number(status), owner);
+          // For initial load, get existing product role if it exists (preserve RECALLED holder role)
+          const existingProduct = productsStore.getById(i);
+          const holderRole = getHolderRoleFromStatus(
+            Number(status),
+            owner,
+            existingProduct?.currentHolderRole
+          );
 
           productsStore.addProductFromOnChain({
             id: i,
@@ -407,7 +422,12 @@ export function useProductSync(options = {}) {
         product.currentHolderAddress = to.toLowerCase();
         const status = await contract.getBatchStatus(tokenId);
         const statusName = STATUS_MAP[Number(status)];
-        const holderRole = getHolderRoleFromStatus(Number(status), to);
+        // Pass current role to preserve RECALLED holder role
+        const holderRole = getHolderRoleFromStatus(
+          Number(status),
+          to,
+          product.currentHolderRole
+        );
 
         product.status = statusName;
         product.currentHolderRole = holderRole;
@@ -457,7 +477,12 @@ export function useProductSync(options = {}) {
         try {
           // Update product state only
           const statusName = STATUS_MAP[Number(newStatus)];
-          const holderRole = getHolderRoleFromStatus(Number(newStatus));
+          // Pass current role to preserve RECALLED holder role
+          const holderRole = getHolderRoleFromStatus(
+            Number(newStatus),
+            product.currentHolderAddress,
+            product.currentHolderRole
+          );
 
           product.status = statusName;
           product.currentHolderRole = holderRole;
@@ -479,14 +504,15 @@ export function useProductSync(options = {}) {
       if (!product) return;
 
       try {
-        // Update product state only
+        // Update product state only - PRESERVE currentHolderRole
+        // Product stays with current holder until transferred to QUARANTINE_VAULT
         product.status = "RECALLED";
-        product.currentHolderRole = "FARMER";
+        // Don't change currentHolderRole - keep existing holder's role
 
         if (onStatusUpdated) {
           onStatusUpdated(product, {
             newStatus: "RECALLED",
-            holderRole: "FARMER",
+            holderRole: product.currentHolderRole, // Use existing role, not hardcoded FARMER
           });
         }
       } catch (error) {

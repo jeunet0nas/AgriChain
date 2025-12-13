@@ -22,7 +22,7 @@ const props = defineProps({
 
 const labelMap = {
   HARVESTED: "Đã thu hoạch",
-  INSPECTING: "Đang kiểm định",
+  INSPECTING: "Đã kiểm định",
   IN_TRANSIT: "Đang vận chuyển",
   DELIVERED: "Đã giao cho bán lẻ",
   RETAILED: "Đang bán lẻ",

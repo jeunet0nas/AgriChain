@@ -3,9 +3,6 @@
     class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3"
   >
     <h2 class="text-sm font-semibold text-slate-900">Tạo token sản phẩm mới</h2>
-    <p class="text-xs text-slate-500">
-      Thông tin chi tiết sẽ được lưu vào metadata và hiển thị đầy đủ trên UI.
-    </p>
 
     <div class="grid grid-cols-1 gap-3 text-xs">
       <!-- Row 1: Tên Lô + Loại -->
@@ -19,7 +16,7 @@
             v-model="formBatchName"
             type="text"
             class="w-full rounded-xl border border-slate-300 px-3 py-2"
-            placeholder="VD: Lô xoài cát Hòa Lộc 2025-01"
+            placeholder="Nhập tên lô hàng"
           />
         </div>
 
@@ -35,9 +32,6 @@
             <option value="" disabled>Chọn loại sản phẩm</option>
             <option value="fruit">Trái cây</option>
             <option value="vegetable">Rau củ</option>
-            <option value="grain">Ngũ cốc</option>
-            <option value="seafood">Thủy sản</option>
-            <option value="meat">Thịt gia súc/gia cầm</option>
             <option value="other">Khác</option>
           </select>
         </div>
@@ -59,14 +53,14 @@
 
         <div class="space-y-1">
           <label class="font-medium text-slate-700 flex items-center gap-1">
-            Tên nông trại / Hộ sản xuất
+            Tên nơi sản xuất
             <span class="text-red-500">*</span>
           </label>
           <input
             v-model="formFarmName"
             type="text"
             class="w-full rounded-xl border border-slate-300 px-3 py-2"
-            placeholder="VD: Nông trại Hòa Lộc, Hộ ông Nguyễn Văn A"
+            placeholder="Trại nuôi... "
           />
         </div>
       </div>
@@ -81,7 +75,7 @@
           v-model="formAddress"
           type="text"
           class="w-full rounded-xl border border-slate-300 px-3 py-2"
-          placeholder="VD: Xã XYZ, Huyện ABC, Tỉnh DEF"
+          placeholder="Nhập địa chỉ"
         />
       </div>
 
@@ -94,18 +88,15 @@
           v-model="formDescription"
           rows="2"
           class="w-full rounded-xl border border-slate-300 px-3 py-2"
-          placeholder="VD: Sản phẩm organic, không sử dụng thuốc trừ sâu..."
+          placeholder="Sản phẩm organic, không sử dụng thuốc trừ sâu..."
         ></textarea>
-        <p class="text-[10px] text-slate-400">
-          Tất cả thông tin được lưu trong IPFS metadata (không on-chain)
-        </p>
       </div>
     </div>
 
-    <!-- 📷 Upload ảnh sản phẩm -->
+    <!-- Upload ảnh sản phẩm -->
     <div class="space-y-2">
       <label class="font-medium text-slate-700 text-xs flex items-center gap-1">
-        📷 Ảnh sản phẩm
+        Ảnh sản phẩm
         <span class="text-red-500">*</span>
       </label>
 
@@ -545,8 +536,8 @@ async function handleCreateBatch() {
     const tokenId = Number(mintEvent.args.batchId);
     lastCreatedId.value = tokenId;
 
-    submitStatus.value = `✅ Tạo lô thành công! Batch ID: ${tokenId}`;
-    console.log(`[FarmerCreateBatch] ✅ Batch ${tokenId} created successfully`);
+    submitStatus.value = `Tạo lô thành công! ID: ${tokenId}`;
+    console.log(`[FarmerCreateBatch] Batch ${tokenId} created successfully`);
 
     // Event listener will auto-add to store, no need to emit
     resetForm();
