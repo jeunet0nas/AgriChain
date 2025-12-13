@@ -14,48 +14,55 @@ const routes = [
     path: "/",
     name: "home",
     component: HomeView,
+    meta: { title: "Trang chủ - AgriChain" },
   },
   {
     path: "/track/:id",
     name: "track",
     component: TrackView,
     props: true,
+    meta: { title: "Tra cứu lô hàng - AgriChain" },
   },
   {
     path: "/farmer",
     name: "farmer",
     component: FarmerView,
-    meta: { requiresRoles: ["FARMER"] },
+    meta: { requiresRoles: ["FARMER"], title: "Nông dân - AgriChain" },
   },
   {
     path: "/inspector",
     name: "inspector",
     component: InspectorView,
-    meta: { requiresRoles: ["INSPECTOR"] },
+    meta: { requiresRoles: ["INSPECTOR"], title: "Kiểm định viên - AgriChain" },
   },
   {
     path: "/logistics",
     name: "logistics",
     component: LogisticsView,
-    meta: { requiresRoles: ["LOGISTICS"] },
+    meta: { requiresRoles: ["LOGISTICS"], title: "Vận chuyển - AgriChain" },
   },
   {
     path: "/retailer",
     name: "retailer",
     component: RetailerView,
-    meta: { requiresRoles: ["RETAILER"] },
+    meta: { requiresRoles: ["RETAILER"], title: "Nhà bán lẻ - AgriChain" },
   },
   {
     path: "/admin",
     name: "admin",
     component: AdminView,
-    meta: { requiresRoles: ["ADMIN"] },
+    meta: { requiresRoles: ["ADMIN"], title: "Quản trị - AgriChain" },
   },
 ];
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
+});
+
+// Update document title based on route meta
+router.afterEach((to) => {
+  document.title = to.meta.title || "AgriChain - Blockchain Supply Chain";
 });
 
 // router.beforeEach((to, from, next) => {

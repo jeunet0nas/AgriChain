@@ -12,10 +12,14 @@
     <!-- Nội dung chính cho Farmer -->
     <div v-else class="space-y-6">
       <!-- Header -->
-      <div class="flex flex-col gap-2">
-        <h2 class="text-4xl font-semibold tracking-tight text-slate-900">
-          BẢNG ĐIỀU KHIỂN
+      <div class="space-y-2">
+        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+          Bảng điều khiển Nông dân (Farmer)
         </h2>
+        <p class="text-sm text-slate-600 max-w-2xl">
+          Tạo lô hàng mới, theo dõi các lô đã thu hoạch và chờ kiểm định, gửi lô
+          cho logistics sau khi kiểm định hoàn tất.
+        </p>
       </div>
 
       <!-- Form tạo lô on-chain -->

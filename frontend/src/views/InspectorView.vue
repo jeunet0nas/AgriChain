@@ -12,13 +12,13 @@
     <!-- Nội dung chính cho Inspector -->
     <div v-else class="space-y-6">
       <div class="space-y-2">
-        <h2 class="text-xl font-semibold tracking-tight text-slate-900">
-          Bảng điều khiển kiểm định viên
+        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+          Bảng điều khiển Kiểm định viên (Inspector)
         </h2>
         <p class="text-sm text-slate-600 max-w-2xl">
-          Kiểm tra các lô cần được chứng thực và cập nhật trạng thái sang
-          <strong>INSPECTING</strong>. Sau khi attest on-chain, luồng tiếp theo
-          sẽ do nông dân và logistics xử lý.
+          Kiểm tra và chứng thực các lô đã thu hoạch, tải certificate lên IPFS
+          và cập nhật trạng thái sang <strong>INSPECTING</strong> trên
+          blockchain.
         </p>
       </div>
 
