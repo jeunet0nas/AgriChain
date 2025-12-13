@@ -151,6 +151,22 @@ const loadingWallet = computed(() => session.loadingWallet);
 const walletError = computed(() => session.walletError);
 const hasAnyRole = computed(() => session.hasAnyRole);
 
+// Hiển thị role label
+const currentRoleLabel = computed(() => {
+  if (!isConnected.value) return "Chưa kết nối";
+
+  const roleLabels = [];
+  if (roles.value.ADMIN) roleLabels.push("Admin");
+  if (roles.value.FARMER) roleLabels.push("Farmer");
+  if (roles.value.INSPECTOR) roleLabels.push("Inspector");
+  if (roles.value.LOGISTICS) roleLabels.push("Logistics");
+  if (roles.value.RETAILER) roleLabels.push("Retailer");
+
+  if (roleLabels.length === 0) return "Không có quyền";
+  if (roleLabels.length === 1) return roleLabels[0];
+  return roleLabels.join(", ");
+});
+
 function onConnect() {
   session.connectWallet();
 }

@@ -17,3 +17,15 @@ export function formatTimestamp(timestamp) {
   const seconds = String(date.getSeconds()).padStart(2, "0");
   return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
+
+/**
+ * Hash an Ethereum address using keccak256
+ * @param {string} address - Ethereum address (0x...)
+ * @returns {string} Hashed address (0x...)
+ */
+export function hashAddress(address) {
+  if (!address || !address.trim()) {
+    return "0x" + "0".repeat(64);
+  }
+  return ethers.keccak256(ethers.toUtf8Bytes(address.toLowerCase().trim()));
+}

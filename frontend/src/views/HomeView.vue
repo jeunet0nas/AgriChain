@@ -6,8 +6,8 @@
         Tra cứu nguồn gốc nông sản
       </h2>
       <p class="text-sm text-slate-600 max-w-xl">
-        Nhập mã lô / ID sản phẩm được in trên bao bì để xem thông tin nguồn gốc,
-        trạng thái vận hành và tài nguyên chứng nhận được lưu trữ trên IPFS.
+        Nhập mã lô hàng để xem thông tin nguồn gốc, trạng thái vận hành và tài
+        nguyên chứng nhận khác.
       </p>
     </div>
 
@@ -24,7 +24,7 @@
             class="block text-xs font-medium text-slate-600 mb-1"
             for="tracking-id"
           >
-            Mã lô / Product ID
+            Mã lô hàng
           </label>
           <input
             id="tracking-id"

@@ -35,7 +35,7 @@
       <!-- Lô chờ kiểm định -->
       <RoleProductTable
         :products="harvestedProducts"
-        title="Lô chờ kiểm định (HARVESTED)"
+        title="Lô chờ kiểm định"
         subtitle="Các lô đã thu hoạch, do nông dân nắm giữ, chờ kiểm định."
         empty-message="Chưa có lô nào ở trạng thái HARVESTED."
       >
@@ -53,13 +53,13 @@
       <!-- Lô đang kiểm định -->
       <RoleProductTable
         :products="inspectingProducts"
-        title="Lô đang kiểm định (INSPECTING)"
-        subtitle="Các lô đã được attest."
+        title="Lô đẫ kiểm định"
+        subtitle="Các lô đã được kiểm định"
         empty-message="Chưa có lô nào ở trạng thái INSPECTING."
       />
     </div>
 
-    <!-- 📄 Modal Attest với PDF upload -->
+    <!-- Modal kiểm định với tải PDF -->
     <div
       v-if="showAttestModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -75,7 +75,7 @@
         >
           <div>
             <h3 class="text-sm font-semibold text-slate-900">
-              🔍 Attest Product #{{ selectedProduct?.id }}
+              Kiểm định lô hàng #{{ selectedProduct?.id }}
             </h3>
             <p class="text-xs text-slate-600">{{ selectedProduct?.name }}</p>
           </div>
@@ -107,7 +107,7 @@
             <label
               class="font-medium text-slate-700 text-xs flex items-center gap-1"
             >
-              📄 Certificate PDF
+              Chứng chỉ PDF
               <span class="text-red-500">*</span>
             </label>
 
@@ -270,7 +270,7 @@
             @click="handleAttestWithPDF"
           >
             <span v-if="submitting">Đang xử lý...</span>
-            <span v-else>Xác nhận Attest</span>
+            <span v-else>Xác nhận kiểm định</span>
           </button>
         </div>
       </div>
@@ -279,366 +279,49 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import RoleProductTable from "../components/role/RoleProductTable.vue";
 import { useProductsStore } from "../stores/useProductsStore";
 import { useSessionStore } from "../stores/useSessionStore";
-import { getSignerContract } from "../web3/contractClient";
-import { toLocationHash } from "../utils/helpers";
-import { reloadProductEvents } from "../stores/useProductSync";
-import {
-  uploadMetadataToIPFS,
-  uploadPDFToIPFS,
-  fetchMetadataFromIPFS,
-} from "../web3/ipfsClient";
+import { useInspectorAttest } from "../composables/useInspectorAttest";
 
 // Stores
 const productsStore = useProductsStore();
 const session = useSessionStore();
 const roles = computed(() => session.roles);
-const currentAccount = computed(() => session.currentAccount);
 
-// State cho attest (legacy - giữ để tương thích)
-const attestLoadingId = ref(null);
-const attestError = ref("");
-const attestSuccess = ref("");
+// Inspector attest composable
+const {
+  // Modal state
+  showAttestModal,
+  selectedProduct,
+  submitting,
+  modalAttestError,
+  modalAttestSuccess,
 
-// 📄 Modal state
-const showAttestModal = ref(false);
-const selectedProduct = ref(null);
-const submitting = ref(false);
-const modalAttestError = ref("");
-const modalAttestSuccess = ref("");
+  // PDF state
+  pdfFileInput,
+  selectedPDF,
+  pdfError,
+  uploadingPDF,
+  pdfUploadProgress,
 
-// 📄 PDF upload state
-const pdfFileInput = ref(null);
-const selectedPDF = ref(null);
-const pdfError = ref("");
-const uploadingPDF = ref(false);
-const pdfUploadProgress = ref(0);
+  // Methods
+  openAttestModal,
+  closeAttestModal,
+  handlePDFSelect,
+  formatFileSize,
+  handleAttestWithPDF,
+} = useInspectorAttest();
 
-// 📄 Format file size
-function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-}
-
-// Helper location hash
-// function toLocationHash(locationString) {
-//   if (!locationString || !locationString.trim()) {
-//     return "0x" + "0".repeat(64);
-//   }
-//   return ethers.keccak256(ethers.toUtf8Bytes(locationString.trim()));
-// }
-
-// 👇 SỬA: Computed với debug log
-const harvestedProducts = computed(() => {
-  const filtered = productsStore.products.filter(
+// Product filters - Inspector xem các lô HARVESTED (do FARMER giữ)
+const harvestedProducts = computed(() =>
+  productsStore.products.filter(
     (p) => p.status === "HARVESTED" && p.currentHolderRole === "FARMER"
-  );
+  )
+);
 
-  console.log(
-    "[Inspector] Harvested products:",
-    filtered.map((p) => ({
-      id: p.id,
-      name: p.name,
-      status: p.status,
-    }))
-  );
-
-  return filtered;
-});
-
-const inspectingProducts = computed(() => {
-  const filtered = productsStore.products.filter(
-    (p) => p.status === "INSPECTING"
-  );
-
-  console.log(
-    "[Inspector] Inspecting products:",
-    filtered.map((p) => ({
-      id: p.id,
-      name: p.name,
-      status: p.status,
-    }))
-  );
-
-  return filtered;
-});
-
-// 📄 Open attest modal
-function openAttestModal(product) {
-  selectedProduct.value = product;
-  showAttestModal.value = true;
-  clearPDF();
-  modalAttestError.value = "";
-  modalAttestSuccess.value = "";
-}
-
-// 📄 Close attest modal
-function closeAttestModal() {
-  showAttestModal.value = false;
-  selectedProduct.value = null;
-  clearPDF();
-  modalAttestError.value = "";
-  modalAttestSuccess.value = "";
-}
-
-// 📄 Handle PDF selection
-function handlePDFSelect(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  pdfError.value = "";
-
-  // Validate file type
-  if (file.type !== "application/pdf") {
-    pdfError.value = "Chỉ chấp nhận file PDF";
-    return;
-  }
-
-  // Validate file size (10MB max)
-  const MAX_SIZE = 10 * 1024 * 1024;
-  if (file.size > MAX_SIZE) {
-    pdfError.value = `Kích thước file vượt quá ${MAX_SIZE / 1024 / 1024}MB`;
-    return;
-  }
-
-  selectedPDF.value = file;
-  console.log("[Inspector] PDF selected:", {
-    name: file.name,
-    size: file.size,
-    type: file.type,
-  });
-}
-
-// 📄 Clear selected PDF
-function clearPDF() {
-  selectedPDF.value = null;
-  pdfError.value = "";
-  pdfUploadProgress.value = 0;
-
-  if (pdfFileInput.value) {
-    pdfFileInput.value.value = "";
-  }
-}
-
-// 📄 Main attest function với PDF
-async function handleAttestWithPDF() {
-  modalAttestError.value = "";
-  modalAttestSuccess.value = "";
-
-  if (!selectedProduct.value || !selectedPDF.value) {
-    modalAttestError.value = "Vui lòng chọn PDF certificate";
-    return;
-  }
-
-  if (!roles.value.INSPECTOR) {
-    modalAttestError.value = "Bạn không có quyền Inspector.";
-    return;
-  }
-
-  try {
-    submitting.value = true;
-
-    // BƯỚC 1: Upload PDF lên IPFS
-    modalAttestSuccess.value = "Đang upload certificate lên IPFS...";
-    uploadingPDF.value = true;
-    pdfUploadProgress.value = 0;
-
-    const certificateCID = await uploadPDFToIPFS(
-      selectedPDF.value,
-      (percent) => {
-        pdfUploadProgress.value = percent;
-      }
-    );
-
-    console.log(`[Inspector] ✅ Certificate uploaded: ${certificateCID}`);
-    uploadingPDF.value = false;
-
-    // BƯỚC 2: Fetch metadata hiện tại và update với certificate
-    modalAttestSuccess.value = "Đang cập nhật metadata...";
-
-    console.log("[Inspector] 📋 Current product state:", {
-      id: selectedProduct.value.id,
-      oldURI: selectedProduct.value.uri,
-      hasMetadata: !!selectedProduct.value.metadata,
-      oldMetadata: selectedProduct.value.metadata,
-    });
-
-    let currentMetadata = selectedProduct.value.metadata;
-    if (!currentMetadata && selectedProduct.value.uri.startsWith("ipfs://")) {
-      console.log(
-        "[Inspector] Fetching current metadata from:",
-        selectedProduct.value.uri
-      );
-      currentMetadata = await fetchMetadataFromIPFS(selectedProduct.value.uri);
-      console.log("[Inspector] ✅ Current metadata fetched:", currentMetadata);
-    }
-
-    // Tạo metadata mới với certificate info
-    const updatedMetadata = {
-      ...currentMetadata,
-      certificate: certificateCID,
-      certificateName: selectedPDF.value.name,
-      certificateSize: selectedPDF.value.size,
-      attestedBy: currentAccount.value,
-      attestedAt: new Date().toISOString(),
-    };
-
-    console.log("[Inspector] 📦 New metadata to upload:", updatedMetadata);
-
-    // Upload metadata mới lên IPFS
-    const newMetadataURI = await uploadMetadataToIPFS(updatedMetadata);
-    console.log(
-      `[Inspector] ✅ New metadata uploaded to IPFS: ${newMetadataURI}`
-    );
-    console.log(
-      `[Inspector] 🔄 Metadata change: ${selectedProduct.value.uri} → ${newMetadataURI}`
-    );
-
-    // BƯỚC 3: Gọi smart contract attest
-    modalAttestSuccess.value = "Đang gửi transaction attest...";
-
-    const contract = await getSignerContract();
-
-    // 3a. Update batch URI on-chain (chỉ cần 1 transaction)
-    // Note: Inspector phải update URI để attach certificate
-    console.log("[Inspector] 📝 Updating batch URI + marking inspected...");
-
-    // Update URI trước
-    const txUpdateURI = await contract.updateBatchURI(
-      selectedProduct.value.id,
-      newMetadataURI
-    );
-    modalAttestSuccess.value = "Đang cập nhật metadata...";
-    await txUpdateURI.wait();
-    console.log("[Inspector] ✅ Batch URI updated on-chain");
-
-    // 3b. Mark batch inspected (transaction thứ 2 - bắt buộc để thay đổi status)
-    modalAttestSuccess.value = "Đang gửi transaction attest...";
-    const tx = await contract.markBatchInspected(selectedProduct.value.id);
-
-    modalAttestSuccess.value = "Đang chờ transaction được xác nhận...";
-    await tx.wait();
-
-    // BƯỚC 4: Update local store
-    const actor = currentAccount.value || "0xINSPECTOR";
-    const timestamp = new Date().toISOString();
-
-    console.log("[Inspector] 📝 Updating local store with new status...");
-    productsStore.updateStatus(selectedProduct.value.id, "INSPECTING", {
-      actor,
-      timestamp,
-      currentHolderRole: selectedProduct.value.currentHolderRole,
-      currentHolderAddress: selectedProduct.value.currentHolderAddress,
-      addEvent: false, // Event listener sẽ tự add
-    });
-
-    // Update metadata trong product
-    console.log(
-      "[Inspector] 📝 Manually updating product URI and metadata in store..."
-    );
-    const product = productsStore.getById(selectedProduct.value.id);
-    if (product) {
-      const oldURI = product.uri;
-      product.uri = newMetadataURI;
-      product.metadata = updatedMetadata;
-      console.log("[Inspector] ✅ Local product updated:", {
-        id: product.id,
-        oldURI,
-        newURI: product.uri,
-        hasNewCertificate: !!product.metadata?.certificate,
-        certificateCID: product.metadata?.certificate,
-      });
-    } else {
-      console.error(
-        "[Inspector] ⚠️ Could not find product in store to update!"
-      );
-    }
-
-    modalAttestSuccess.value = `✅ Attest thành công! Certificate đã được lưu on-chain.`;
-
-    console.log("[Inspector] 🎉 Attest complete:", {
-      productId: selectedProduct.value.id,
-      certificateCID,
-      newMetadataURI,
-      updatedMetadata,
-    });
-
-    // 🔄 Force reload events để đảm bảo timeline đầy đủ
-    console.log("[Inspector] 🔄 Reloading events for timeline...");
-    await reloadProductEvents(selectedProduct.value.id);
-
-    // Đóng modal sau 2s
-    setTimeout(() => {
-      closeAttestModal();
-    }, 2000);
-  } catch (error) {
-    console.error("[Inspector] Attest failed:", error);
-    modalAttestError.value = `Lỗi: ${error.message}`;
-    uploadingPDF.value = false;
-  } finally {
-    submitting.value = false;
-  }
-}
-
-// Legacy function - giữ để không break code cũ
-async function attestOnChain(product) {
-  attestError.value = "";
-  attestSuccess.value = "";
-
-  console.log("[Inspector] Attesting product:", {
-    id: product.id,
-    name: product.name,
-    status: product.status,
-  });
-
-  if (!product) return;
-
-  if (!roles.value.INSPECTOR) {
-    attestError.value = "Bạn không có quyền Inspector.";
-    return;
-  }
-
-  try {
-    attestLoadingId.value = product.id;
-
-    const contract = await getSignerContract();
-    // ERC721: No locationHash parameter needed
-    const tx = await contract.markBatchInspected(product.id);
-    attestSuccess.value = "Đang chờ giao dịch attest được xác nhận...";
-    await tx.wait();
-
-    const actor = currentAccount.value || "0xINSPECTOR...DEMO";
-    const timestamp = new Date().toISOString();
-
-    // 👇 SỬA: Tắt auto-add event, chỉ update status
-    productsStore.updateStatus(product.id, "INSPECTING", {
-      actor,
-      locationHash,
-      timestamp,
-      currentHolderRole: product.currentHolderRole,
-      currentHolderAddress: product.currentHolderAddress,
-      addEvent: false, // ← Tắt auto-add event
-    });
-
-    // 👇 XÓA: Không thêm event thủ công nữa, để blockchain event tự add
-    // productsStore.addEvent(...) đã bị xóa
-
-    attestSuccess.value = `Chứng nhận on-chain thành công cho lô "${product.name}" (ID ${product.id}).`;
-
-    console.log("[Inspector] Attest success for:", {
-      id: product.id,
-      name: product.name,
-    });
-  } catch (e) {
-    console.error("[Inspector] markBatchInspected error:", e);
-    attestError.value =
-      "Không thể attest lô này. Giao dịch bị huỷ hoặc revert.";
-  } finally {
-    attestLoadingId.value = null;
-  }
-}
+const inspectingProducts = computed(() =>
+  productsStore.products.filter((p) => p.status === "INSPECTING")
+);
 </script>

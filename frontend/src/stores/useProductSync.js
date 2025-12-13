@@ -60,7 +60,34 @@ export function useProductSync(options = {}) {
     7: "RECALLED",
   };
 
-  function getHolderRoleFromStatus(statusNum) {
+  // Special vault addresses from smart contract
+  const QUARANTINE_VAULT = "0x000000000000000000000000000000000000dead";
+  const ARCHIVE_VAULT = "0x000000000000000000000000000000000000aaaa";
+
+  function getHolderRoleFromAddress(address) {
+    const addr = address.toLowerCase();
+    if (addr === QUARANTINE_VAULT) return "QUARANTINE";
+    if (addr === ARCHIVE_VAULT) return "ARCHIVE";
+    return null; // Not a special vault
+  }
+
+  function getHolderRoleFromStatus(
+    statusNum,
+    ownerAddress = null,
+    currentRole = null
+  ) {
+    // Check special vault addresses first
+    if (ownerAddress) {
+      const vaultRole = getHolderRoleFromAddress(ownerAddress);
+      if (vaultRole) return vaultRole;
+    }
+
+    // RECALLED: Preserve current holder's role (product stays with current role holder until transferred)
+    if (statusNum === 7 && currentRole) {
+      return currentRole;
+    }
+
+    // Status-based role mapping (for non-RECALLED states)
     const map = {
       1: "FARMER",
       2: "FARMER",
@@ -68,7 +95,7 @@ export function useProductSync(options = {}) {
       4: "RETAILER",
       5: "RETAILER",
       6: "CONSUMER",
-      7: "FARMER",
+      7: "FARMER", // Fallback if no currentRole provided
     };
     return map[statusNum] || "UNKNOWN";
   }
@@ -109,7 +136,13 @@ export function useProductSync(options = {}) {
           const metadata = await loadMetadataFromURI(uri);
           const name = metadata?.name || `Lô #${i}`;
           const statusName = STATUS_MAP[Number(status)] || "NOT_EXIST";
-          const holderRole = getHolderRoleFromStatus(Number(status));
+          // For initial load, get existing product role if it exists (preserve RECALLED holder role)
+          const existingProduct = productsStore.getById(i);
+          const holderRole = getHolderRoleFromStatus(
+            Number(status),
+            owner,
+            existingProduct?.currentHolderRole
+          );
 
           productsStore.addProductFromOnChain({
             id: i,
@@ -191,6 +224,15 @@ export function useProductSync(options = {}) {
         const product = productsStore.getById(batchId);
         if (!product) continue;
 
+        // Validate event args
+        if (!event.args.farmer) {
+          console.warn(
+            `[${viewName}] BatchMinted event missing farmer:`,
+            batchId
+          );
+          continue;
+        }
+
         const block = await event.getBlock();
         const farmer = event.args.farmer.toLowerCase();
 
@@ -209,6 +251,15 @@ export function useProductSync(options = {}) {
         const product = productsStore.getById(batchId);
         if (!product) continue;
 
+        // Validate event args
+        if (!event.args.inspector) {
+          console.warn(
+            `[${viewName}] BatchInspected event missing inspector:`,
+            batchId
+          );
+          continue;
+        }
+
         const block = await event.getBlock();
 
         productsStore.addEvent(batchId, {
@@ -226,6 +277,19 @@ export function useProductSync(options = {}) {
         const batchId = Number(event.args.batchId);
         const product = productsStore.getById(batchId);
         if (!product) continue;
+
+        // Validate event args
+        if (
+          event.args.updater === undefined ||
+          event.args.oldStatus === undefined ||
+          event.args.newStatus === undefined
+        ) {
+          console.warn(
+            `[${viewName}] StatusUpdated event missing args:`,
+            batchId
+          );
+          continue;
+        }
 
         const block = await event.getBlock();
         const oldStatusName = STATUS_MAP[Number(event.args.oldStatus)];
@@ -255,6 +319,12 @@ export function useProductSync(options = {}) {
         if (event.args.from === "0x0000000000000000000000000000000000000000")
           continue;
 
+        // Validate event args exist
+        if (!event.args.to || !event.args.from) {
+          console.warn(`[${viewName}] Transfer event missing args:`, tokenId);
+          continue;
+        }
+
         const block = await event.getBlock();
 
         productsStore.addEvent(tokenId, {
@@ -273,6 +343,15 @@ export function useProductSync(options = {}) {
         const batchId = Number(event.args.batchId);
         const product = productsStore.getById(batchId);
         if (!product) continue;
+
+        // Validate event args
+        if (!event.args.caller) {
+          console.warn(
+            `[${viewName}] BatchRecalled event missing caller:`,
+            batchId
+          );
+          continue;
+        }
 
         const block = await event.getBlock();
 
@@ -343,7 +422,12 @@ export function useProductSync(options = {}) {
         product.currentHolderAddress = to.toLowerCase();
         const status = await contract.getBatchStatus(tokenId);
         const statusName = STATUS_MAP[Number(status)];
-        const holderRole = getHolderRoleFromStatus(Number(status));
+        // Pass current role to preserve RECALLED holder role
+        const holderRole = getHolderRoleFromStatus(
+          Number(status),
+          to,
+          product.currentHolderRole
+        );
 
         product.status = statusName;
         product.currentHolderRole = holderRole;
@@ -393,7 +477,12 @@ export function useProductSync(options = {}) {
         try {
           // Update product state only
           const statusName = STATUS_MAP[Number(newStatus)];
-          const holderRole = getHolderRoleFromStatus(Number(newStatus));
+          // Pass current role to preserve RECALLED holder role
+          const holderRole = getHolderRoleFromStatus(
+            Number(newStatus),
+            product.currentHolderAddress,
+            product.currentHolderRole
+          );
 
           product.status = statusName;
           product.currentHolderRole = holderRole;
@@ -415,14 +504,15 @@ export function useProductSync(options = {}) {
       if (!product) return;
 
       try {
-        // Update product state only
+        // Update product state only - PRESERVE currentHolderRole
+        // Product stays with current holder until transferred to QUARANTINE_VAULT
         product.status = "RECALLED";
-        product.currentHolderRole = "FARMER";
+        // Don't change currentHolderRole - keep existing holder's role
 
         if (onStatusUpdated) {
           onStatusUpdated(product, {
             newStatus: "RECALLED",
-            holderRole: "FARMER",
+            holderRole: product.currentHolderRole, // Use existing role, not hardcoded FARMER
           });
         }
       } catch (error) {
@@ -585,6 +675,14 @@ export async function reloadProductEvents(productId) {
       // Skip mint transfers
       if (event.args.from === "0x0000000000000000000000000000000000000000")
         continue;
+
+      // Validate event args exist
+      if (!event.args.to || !event.args.from) {
+        console.warn(
+          `[reloadProductEvents] Transfer event missing args for product ${productId}`
+        );
+        continue;
+      }
 
       const block = await event.getBlock();
       productsStore.addEvent(productId, {
