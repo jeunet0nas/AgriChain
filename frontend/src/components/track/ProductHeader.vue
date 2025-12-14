@@ -65,9 +65,14 @@
               <p class="text-xs font-medium text-slate-900">
                 {{ getRoleLabel(product.currentHolderRole) }}
               </p>
-              <p class="font-mono text-[10px] text-slate-600 truncate">
+              <p
+                class="font-mono text-[10px] text-slate-600 truncate"
+                :title="'Địa chỉ đã được mã hóa để bảo mật'"
+              >
                 {{
-                  formatAddress(product.currentHolderAddress || "Chưa xác định")
+                  product.currentHolderAddress
+                    ? formatAddress(hashAddress(product.currentHolderAddress))
+                    : "Chưa xác định"
                 }}
               </p>
             </div>
@@ -113,6 +118,7 @@ import { ref, watch } from "vue";
 import ProductStatusBadge from "./ProductStatusBadge.vue";
 import ProductDetailsGrid from "./ProductDetailsGrid.vue";
 import { useTrackingHelpers } from "../../composables/useTrackingHelpers";
+import { hashAddress } from "../../utils/helpers";
 
 const props = defineProps({
   product: {

@@ -27,7 +27,7 @@ def test_batch_inspected_event(deployed_contract, farmer, inspector):
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
     
-    tx = sc.markBatchInspected(batch_id, sender=inspector)
+    tx = sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     events = list(tx.events)
     inspected_events = [e for e in events if e.event_name == "BatchInspected"]
@@ -43,7 +43,7 @@ def test_transfer_event(deployed_contract, farmer, inspector, logistics):
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     tx = sc.transferFrom(farmer, logistics, batch_id, sender=farmer)
     
@@ -62,7 +62,7 @@ def test_status_updated_event(deployed_contract, farmer, inspector, logistics):
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     tx = sc.transferFrom(farmer, logistics, batch_id, sender=farmer)
     
@@ -99,7 +99,7 @@ def test_batch_archived_event(deployed_contract, farmer, inspector, logistics, r
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     sc.transferFrom(farmer, logistics, batch_id, sender=farmer)
     sc.transferFrom(logistics, retailer, batch_id, sender=logistics)
     

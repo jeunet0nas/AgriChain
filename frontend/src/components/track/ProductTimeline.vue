@@ -76,8 +76,11 @@
               />
             </svg>
             <span class="font-medium">Thực hiện bởi:</span>
-            <span class="font-mono text-slate-900 break-all">
-              {{ formatAddress(ev.actor) }}
+            <span
+              class="font-mono text-slate-900 break-all"
+              :title="'Địa chỉ đã được mã hóa để bảo mật'"
+            >
+              {{ formatAddress(hashAddress(ev.actor)) }}
             </span>
           </div>
 
@@ -192,7 +195,7 @@
 </template>
 
 <script setup>
-import { formatTimestamp } from "../../utils/helpers";
+import { formatTimestamp, hashAddress } from "../../utils/helpers";
 import { useTrackingHelpers } from "../../composables/useTrackingHelpers";
 
 defineProps({

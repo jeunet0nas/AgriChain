@@ -26,7 +26,7 @@ def test_happy_path_full_lifecycle(deployed_contract, farmer, inspector, logisti
     assert sc.tokenURI(batch_id) == uri
     
     # 2. Inspector marks inspected
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://QmTest123/inspected.json", sender=inspector)
     assert sc.getBatchStatus(batch_id) == sc.get_INSPECTING_STATE()
     assert sc.ownerOf(batch_id) == farmer.address  # Still with farmer
     
@@ -63,7 +63,7 @@ def test_recall_path_full_lifecycle(deployed_contract, admin, farmer, inspector,
     # 1-4. Normal flow to DELIVERED
     sc.mintBatch("ipfs://batch", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://batch/inspected.json", sender=inspector)
     sc.transferFrom(farmer, logistics, batch_id, sender=farmer)
     sc.transferFrom(logistics, retailer, batch_id, sender=logistics)
     
@@ -94,7 +94,7 @@ def test_multiple_batches_independent_flows(deployed_contract, admin, farmer, in
     # Batch A: Full happy path
     sc.mintBatch("ipfs://batch-a", sender=farmer)
     batch_a = sc.tokenCounter()
-    sc.markBatchInspected(batch_a, sender=inspector)
+    sc.markBatchInspected(batch_a, "ipfs://batch-a/inspected.json", sender=inspector)
     sc.transferFrom(farmer, logistics, batch_a, sender=farmer)
     sc.transferFrom(logistics, retailer, batch_a, sender=logistics)
     sc.advanceBatchRetailStatus(batch_a, sender=retailer)
@@ -104,7 +104,7 @@ def test_multiple_batches_independent_flows(deployed_contract, admin, farmer, in
     # Batch B: Recalled
     sc.mintBatch("ipfs://batch-b", sender=farmer)
     batch_b = sc.tokenCounter()
-    sc.markBatchInspected(batch_b, sender=inspector)
+    sc.markBatchInspected(batch_b, "ipfs://batch-b/inspected.json", sender=inspector)
     sc.transferFrom(farmer, logistics, batch_b, sender=farmer)
     sc.markBatchRecalled(batch_b, b"contaminated", sender=admin)
     sc.transferFrom(logistics, QUARANTINE_VAULT, batch_b, sender=logistics)
@@ -112,7 +112,7 @@ def test_multiple_batches_independent_flows(deployed_contract, admin, farmer, in
     # Batch C: In transit
     sc.mintBatch("ipfs://batch-c", sender=farmer)
     batch_c = sc.tokenCounter()
-    sc.markBatchInspected(batch_c, sender=inspector)
+    sc.markBatchInspected(batch_c, "ipfs://batch-c/inspected.json", sender=inspector)
     sc.transferFrom(farmer, logistics, batch_c, sender=farmer)
     
     # Verify independent states
@@ -138,14 +138,14 @@ def test_role_based_access_enforcement_e2e(deployed_contract, admin, farmer, ins
     
     # Consumer cannot inspect
     with pytest.raises(ContractLogicError, match="Missing required role"):
-        sc.markBatchInspected(batch_id, sender=consumer)
+        sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=consumer)
     
     # Consumer cannot recall
     with pytest.raises(ContractLogicError, match="Missing required role"):
         sc.markBatchRecalled(batch_id, b"test", sender=consumer)
     
     # Inspector inspects
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     # Consumer cannot receive from farmer (consumer has no role)
     with pytest.raises(ContractLogicError, match="Recipient has no valid supply-chain role"):

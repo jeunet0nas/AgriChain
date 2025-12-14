@@ -13,7 +13,7 @@ def _mint_only(sc, farmer):
 
 def _mint_attest(sc, farmer, inspector):
     batch_id = _mint_only(sc, farmer)
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://cid/inspected.json", sender=inspector)
     return batch_id
 
 

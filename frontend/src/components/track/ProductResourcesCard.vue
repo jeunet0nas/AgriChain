@@ -2,13 +2,13 @@
   <div
     class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3"
   >
-    <div class="flex items-center justify-between gap-2">
+    <!-- <div class="flex items-center justify-between gap-2">
       <h3 class="text-sm font-semibold text-slate-900">Tài nguyên đính kèm</h3>
       <span class="text-[10px] text-slate-500 truncate">
         URI metadata:
         <span class="font-mono text-emerald-700">{{ product.uri }}</span>
       </span>
-    </div>
+    </div> -->
 
     <!-- Cards for Image & Certificate -->
     <div

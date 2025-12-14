@@ -9,7 +9,7 @@ def test_safe_transfer_to_eoa_works(deployed_contract, farmer, inspector, logist
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     # Transfer to EOA (logistics account)
     sc.safeTransferFrom(farmer, logistics, batch_id, sender=farmer)
@@ -21,7 +21,7 @@ def test_transfer_from_to_eoa_works(deployed_contract, farmer, inspector, logist
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     # transferFrom works to any address
     sc.transferFrom(farmer, logistics, batch_id, sender=farmer)
@@ -33,7 +33,7 @@ def test_safe_transfer_with_data_to_eoa(deployed_contract, farmer, inspector, lo
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     # safeTransferFrom with custom data
     sc.safeTransferFrom(farmer, logistics, batch_id, b"custom data", sender=farmer)
@@ -45,7 +45,7 @@ def test_cannot_transfer_to_zero_address(deployed_contract, farmer, inspector):
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     # Try to transfer to zero address (zero address has no role)
     ZERO = "0x0000000000000000000000000000000000000000"
@@ -62,7 +62,7 @@ def test_cannot_safe_transfer_to_zero_address(deployed_contract, farmer, inspect
     sc = deployed_contract
     sc.mintBatch("ipfs://test", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://test/inspected.json", sender=inspector)
     
     ZERO = "0x0000000000000000000000000000000000000000"
     

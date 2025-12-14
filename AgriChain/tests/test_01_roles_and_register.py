@@ -41,9 +41,9 @@ def test_only_inspector_can_attest(deployed_contract, farmer, inspector):
     batch_id = deployed_contract.tokenCounter()
 
     with pytest.raises(ContractLogicError, match="Missing required role"):
-        deployed_contract.markBatchInspected(batch_id, sender=farmer)
+        deployed_contract.markBatchInspected(batch_id, "ipfs://cid/inspected.json", sender=farmer)
 
-    tx = deployed_contract.markBatchInspected(batch_id, sender=inspector)
+    tx = deployed_contract.markBatchInspected(batch_id, "ipfs://cid/inspected.json", sender=inspector)
     assert deployed_contract.getBatchStatus(batch_id) == deployed_contract.get_INSPECTING_STATE()
 
 # 5) Attest: must be HARVESTED state
@@ -51,7 +51,7 @@ def test_attest_only_from_harvested(deployed_contract, farmer, inspector):
     deployed_contract.mintBatch("ipfs://cid/meta.json", sender=farmer)
     batch_id = deployed_contract.tokenCounter()
     
-    deployed_contract.markBatchInspected(batch_id, sender=inspector)
+    deployed_contract.markBatchInspected(batch_id, "ipfs://cid/inspected.json", sender=inspector)
     
     with pytest.raises(ContractLogicError, match="Must be in HARVESTED state"):
-        deployed_contract.markBatchInspected(batch_id, sender=inspector)
+        deployed_contract.markBatchInspected(batch_id, "ipfs://cid/inspected2.json", sender=inspector)

@@ -60,7 +60,7 @@
             v-model="formFarmName"
             type="text"
             class="w-full rounded-xl border border-slate-300 px-3 py-2"
-            placeholder="Trại nuôi... "
+            placeholder="Trại sản xuất "
           />
         </div>
       </div>
@@ -88,7 +88,7 @@
           v-model="formDescription"
           rows="2"
           class="w-full rounded-xl border border-slate-300 px-3 py-2"
-          placeholder="Sản phẩm organic, không sử dụng thuốc trừ sâu..."
+          placeholder="Thông tin thêm"
         ></textarea>
       </div>
     </div>

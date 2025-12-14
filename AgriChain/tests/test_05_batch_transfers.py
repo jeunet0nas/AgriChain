@@ -9,7 +9,7 @@ def _full_flow_to_delivered(sc, farmer, inspector, logistics, retailer):
     """Helper: mint and progress to DELIVERED state"""
     sc.mintBatch("ipfs://cid/meta.json", sender=farmer)
     batch_id = sc.tokenCounter()
-    sc.markBatchInspected(batch_id, sender=inspector)
+    sc.markBatchInspected(batch_id, "ipfs://cid/inspected.json", sender=inspector)
     sc.transferFrom(farmer, logistics, batch_id, sender=farmer)
     sc.transferFrom(logistics, retailer, batch_id, sender=logistics)
     return batch_id
@@ -41,7 +41,7 @@ def test_independent_batch_status(deployed_contract, admin, farmer, inspector, l
     # Batch 2: IN_TRANSIT
     sc.mintBatch("ipfs://cid2", sender=farmer)
     batch2 = sc.tokenCounter()
-    sc.markBatchInspected(batch2, sender=inspector)
+    sc.markBatchInspected(batch2, "ipfs://cid2/inspected.json", sender=inspector)
     sc.transferFrom(farmer, logistics, batch2, sender=farmer)
     
     # Batch 3: RECALLED
@@ -81,11 +81,11 @@ def test_transfer_one_batch_doesnt_affect_others(deployed_contract, farmer, insp
     # Farmer mints and inspects 2 batches
     sc.mintBatch("ipfs://batch-a", sender=farmer)
     batch_a = sc.tokenCounter()
-    sc.markBatchInspected(batch_a, sender=inspector)
+    sc.markBatchInspected(batch_a, "ipfs://batch-a/inspected.json", sender=inspector)
     
     sc.mintBatch("ipfs://batch-b", sender=farmer)
     batch_b = sc.tokenCounter()
-    sc.markBatchInspected(batch_b, sender=inspector)
+    sc.markBatchInspected(batch_b, "ipfs://batch-b/inspected.json", sender=inspector)
     
     # Transfer only batch_a
     sc.transferFrom(farmer, logistics, batch_a, sender=farmer)
@@ -104,11 +104,11 @@ def test_approval_per_token(deployed_contract, farmer, inspector, logistics):
     # Mint 2 batches
     sc.mintBatch("ipfs://a", sender=farmer)
     batch_a = sc.tokenCounter()
-    sc.markBatchInspected(batch_a, sender=inspector)
+    sc.markBatchInspected(batch_a, "ipfs://a/inspected.json", sender=inspector)
     
     sc.mintBatch("ipfs://b", sender=farmer)
     batch_b = sc.tokenCounter()
-    sc.markBatchInspected(batch_b, sender=inspector)
+    sc.markBatchInspected(batch_b, "ipfs://b/inspected.json", sender=inspector)
     
     # Approve inspector for batch_a only
     sc.approve(inspector, batch_a, sender=farmer)
@@ -131,7 +131,7 @@ def test_operator_approval_all_tokens(deployed_contract, farmer, inspector, logi
     for i in range(3):
         sc.mintBatch(f"ipfs://{i}", sender=farmer)
         batch_id = sc.tokenCounter()
-        sc.markBatchInspected(batch_id, sender=inspector)
+        sc.markBatchInspected(batch_id, f"ipfs://{i}/inspected.json", sender=inspector)
         batch_ids.append(batch_id)
     
     # Set inspector as operator for all farmer's tokens
