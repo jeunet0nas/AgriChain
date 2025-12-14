@@ -85,16 +85,14 @@ def test_logistics_cannot_transfer_to_wrong_role(deployed_contract, farmer, insp
         deployed_contract.transferFrom(logistics, farmer, batch_id, sender=logistics)
 
 
-# 6) Operator (approved) can transfer on behalf of owner, respecting role checks
-def test_operator_can_transfer_respecting_roles(deployed_contract, farmer, inspector, logistics):
+# 6) Direct transfer by owner works (no delegation)
+# Note: Delegation via approval/operator is prevented by actor-role enforcement
+# Only the farmer themselves can initiate the transfer to logistics
+def test_owner_can_transfer_to_logistics(deployed_contract, farmer, inspector, logistics):
     batch_id = _mint_and_attest(deployed_contract, farmer, inspector)
 
-    # Farmer approves inspector as operator
-    deployed_contract.setApprovalForAll(inspector, True, sender=farmer)
-    assert deployed_contract.isApprovedForAll(farmer, inspector) is True
-
-    # Inspector transfers on farmer's behalf to logistics
-    deployed_contract.transferFrom(farmer, logistics, batch_id, sender=inspector)
+    # Farmer (owner and actor) transfers to logistics
+    deployed_contract.transferFrom(farmer, logistics, batch_id, sender=farmer)
     
     assert deployed_contract.ownerOf(batch_id) == logistics.address
     assert deployed_contract.getBatchStatus(batch_id) == deployed_contract.get_IN_TRANSIT_STATE()

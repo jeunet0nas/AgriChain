@@ -69,7 +69,7 @@ def test_delivered_can_transfer_before_retail_advance(deployed_contract, farmer,
         sc.transferFrom(retailer, consumer, batch_id, sender=retailer)
 
 
-# 5) After RETAILED: all transfers blocked
+# 5) After RETAILED: all transfers blocked (must call advanceBatchRetailStatus again to reach CONSUMED)
 def test_transfer_blocked_after_retailed(deployed_contract, farmer, inspector, logistics, retailer):
     sc = deployed_contract
     batch_id = _mint_attest_and_to_retailer(sc, farmer, inspector, logistics, retailer)
@@ -77,8 +77,8 @@ def test_transfer_blocked_after_retailed(deployed_contract, farmer, inspector, l
     sc.advanceBatchRetailStatus(batch_id, sender=retailer)
     assert sc.getBatchStatus(batch_id) == sc.get_RETAILED_STATE()
 
-    # Cannot transfer to normal addresses, only ARCHIVE_VAULT
-    with pytest.raises(ContractLogicError, match="RETAILED can only transfer to ARCHIVE_VAULT"):
+    # Cannot transfer in RETAILED state - must call advanceBatchRetailStatus to reach CONSUMED
+    with pytest.raises(ContractLogicError, match="Token in DELIVERED/RETAILED state cannot be transferred"):
         sc.transferFrom(retailer, logistics, batch_id, sender=retailer)
 
 
@@ -87,14 +87,19 @@ def test_archive_transfer_only_when_consumed(deployed_contract, farmer, inspecto
     sc = deployed_contract
     batch_id = _mint_attest_and_to_retailer(sc, farmer, inspector, logistics, retailer)
 
+    # First call: DELIVERED -> RETAILED
     sc.advanceBatchRetailStatus(batch_id, sender=retailer)
     assert sc.getBatchStatus(batch_id) == sc.get_RETAILED_STATE()
 
-    # In RETAILED state, can only transfer to ARCHIVE_VAULT
-    with pytest.raises(ContractLogicError, match="RETAILED can only transfer to ARCHIVE_VAULT"):
+    # In RETAILED state, cannot transfer to non-ARCHIVE addresses
+    with pytest.raises(ContractLogicError, match="Token in DELIVERED/RETAILED state cannot be transferred"):
         sc.transferFrom(retailer, logistics, batch_id, sender=retailer)
 
-    # Can transfer to ARCHIVE_VAULT (ERC721 compliant: not zero address)
+    # Second call: RETAILED -> CONSUMED
+    sc.advanceBatchRetailStatus(batch_id, sender=retailer)
+    assert sc.getBatchStatus(batch_id) == sc.get_CONSUMED_STATE()
+
+    # Now in CONSUMED state, can transfer to ARCHIVE_VAULT only
     ARCHIVE = "0x000000000000000000000000000000000000aaaa"
     sc.transferFrom(retailer, ARCHIVE, batch_id, sender=retailer)
 

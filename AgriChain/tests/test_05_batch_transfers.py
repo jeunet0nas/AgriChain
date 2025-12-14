@@ -98,8 +98,12 @@ def test_transfer_one_batch_doesnt_affect_others(deployed_contract, farmer, insp
 
 
 # 5) Approval works independently for each batch
-def test_approval_per_token(deployed_contract, farmer, inspector, logistics):
+# Note: Actor-role enforcement requires msg.sender to have FARMER_ROLE
+def test_approval_per_token(deployed_contract, admin, farmer, inspector, logistics):
     sc = deployed_contract
+    
+    # Grant FARMER_ROLE to inspector so they can act as farmer
+    sc.grantRole(sc.get_FARMER_ROLE(), inspector, sender=admin)
     
     # Mint 2 batches
     sc.mintBatch("ipfs://a", sender=farmer)
@@ -110,10 +114,11 @@ def test_approval_per_token(deployed_contract, farmer, inspector, logistics):
     batch_b = sc.tokenCounter()
     sc.markBatchInspected(batch_b, "ipfs://b/inspected.json", sender=inspector)
     
-    # Approve inspector for batch_a only
+    # Farmer approves inspector for batch_a only
     sc.approve(inspector, batch_a, sender=farmer)
     
-    # Inspector can transfer batch_a
+    # Inspector (with FARMER_ROLE) can transfer batch_a
+    # Actor check: msg.sender (inspector) has FARMER_ROLE ✓
     sc.transferFrom(farmer, logistics, batch_a, sender=inspector)
     assert sc.ownerOf(batch_a) == logistics.address
     
@@ -123,8 +128,12 @@ def test_approval_per_token(deployed_contract, farmer, inspector, logistics):
 
 
 # 6) Operator approval works for all tokens
-def test_operator_approval_all_tokens(deployed_contract, farmer, inspector, logistics):
+# Note: Actor-role enforcement requires msg.sender to have FARMER_ROLE
+def test_operator_approval_all_tokens(deployed_contract, admin, farmer, inspector, logistics):
     sc = deployed_contract
+    
+    # Grant FARMER_ROLE to inspector so they can act as farmer
+    sc.grantRole(sc.get_FARMER_ROLE(), inspector, sender=admin)
     
     # Mint 3 batches
     batch_ids = []
@@ -134,10 +143,11 @@ def test_operator_approval_all_tokens(deployed_contract, farmer, inspector, logi
         sc.markBatchInspected(batch_id, f"ipfs://{i}/inspected.json", sender=inspector)
         batch_ids.append(batch_id)
     
-    # Set inspector as operator for all farmer's tokens
+    # Farmer sets inspector as operator for all farmer's tokens
     sc.setApprovalForAll(inspector, True, sender=farmer)
     
-    # Inspector can transfer all batches
+    # Inspector (with FARMER_ROLE) can transfer all batches
+    # Actor check: msg.sender (inspector) has FARMER_ROLE ✓
     for batch_id in batch_ids:
         sc.transferFrom(farmer, logistics, batch_id, sender=inspector)
         assert sc.ownerOf(batch_id) == logistics.address

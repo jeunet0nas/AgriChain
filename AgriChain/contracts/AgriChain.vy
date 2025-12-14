@@ -1,9 +1,5 @@
 # @version ^0.4.3
 
-# =========================
-# EVENTS - ERC721 + Domain
-# =========================
-
 event Transfer:
     _from: indexed(address)
     _to: indexed(address)
@@ -58,10 +54,6 @@ event BatchRecalled:
     reasonHash: bytes32
 
 
-# =========================
-# ERC721 Receiver interface
-# =========================
-
 interface ERC721Receiver:
     def onERC721Received(
         _operator: address,
@@ -94,7 +86,6 @@ CONSUMED: constant(uint256) = 6
 RECALLED: constant(uint256) = 7
 
 # Special vaults
-# Archive vault: dedicated address (not zero!) to comply with ERC721 spec
 ARCHIVE_VAULT: constant(address) = 0x000000000000000000000000000000000000aaaa
 QUARANTINE_VAULT: constant(address) = 0x000000000000000000000000000000000000dEaD
 
@@ -136,11 +127,6 @@ roles: public(HashMap[bytes32, HashMap[address, bool]])
 
 @deploy
 def __init__():
-    """
-    Initialize contract:
-    - Set collection name and symbol
-    - Set deployer as contract owner and ADMIN_ROLE
-    """
     self.contractOwner = msg.sender
     self.tokenCounter = 0
     self.name = "AgriChain721"
@@ -155,34 +141,21 @@ def __init__():
 @view
 @internal
 def _checkRole(_role: bytes32, _account: address):
-    """
-    Revert if the account does not have the required role.
-    """
     assert self.roles[_role][_account], "Missing required role"
 
 @internal
 def _grantRole(_role: bytes32, _account: address):
-    """
-    Grant a role to an account.
-    """
     self.roles[_role][_account] = True
     log RoleGranted(_role, _account, msg.sender)
 
 @internal
 def _revokeRole(_role: bytes32, _account: address):
-    """
-    Revoke a role from an account.
-    """
     self.roles[_role][_account] = False
     log RoleRevoked(_role, _account, msg.sender)
 
 @view
 @internal
 def _checkExists(_batchId: uint256):
-    """
-    Check that a batch token exists.
-    Here we consider existence if its URI is non-empty.
-    """
     assert len(self.tokenURIs[_batchId]) > 0, "Unknown batch"
 
 
@@ -193,10 +166,6 @@ def _checkExists(_batchId: uint256):
 @view
 @internal
 def _isApprovedOrOwner(_spender: address, _tokenId: uint256) -> bool:
-    """
-    Returns true if the spender is the owner, or is approved per-token,
-    or is an approved operator for the owner.
-    """
     self._checkExists(_tokenId)
     owner: address = self.tokenOwner[_tokenId]
     return (
@@ -207,18 +176,11 @@ def _isApprovedOrOwner(_spender: address, _tokenId: uint256) -> bool:
 
 @internal
 def _clearApproval(_tokenId: uint256):
-    """
-    Clear approvals for a given tokenId.
-    """
     if self.tokenApprovals[_tokenId] != empty(address):
         self.tokenApprovals[_tokenId] = empty(address)
 
 @internal
 def _transfer(_from: address, _to: address, _tokenId: uint256):
-    """
-    Internal ERC721 transfer logic.
-    Does not perform role or status checks.
-    """
     assert self.tokenOwner[_tokenId] == _from, "From is not owner"
 
     self._clearApproval(_tokenId)
@@ -231,15 +193,7 @@ def _transfer(_from: address, _to: address, _tokenId: uint256):
     log Transfer(_from, _to, _tokenId)
 
 @internal
-def _checkOnERC721Received(
-    _from: address,
-    _to: address,
-    _tokenId: uint256,
-    _data: Bytes[1024]
-):
-    """
-    If recipient is a contract, ensure it correctly implements ERC721Receiver.
-    """
+def _checkOnERC721Received(_from: address, _to: address, _tokenId: uint256, _data: Bytes[1024]):
     if _to.is_contract:
         resp: bytes4 = extcall ERC721Receiver(_to).onERC721Received(
             msg.sender,
@@ -256,11 +210,6 @@ def _checkOnERC721Received(
 
 @internal
 def _recipient_allowed_for_status(_to: address, _status: uint256):
-    """
-    Status-aware transfer guard:
-    - Enforces which roles (or vaults) can receive a token in a given status.
-    """
-    # Check special vaults FIRST (before role checks)
     if _status == RECALLED:
         assert _to == QUARANTINE_VAULT, "Can only transfer RECALLED to QUARANTINE_VAULT"
         return
@@ -269,12 +218,6 @@ def _recipient_allowed_for_status(_to: address, _status: uint256):
         assert _to == ARCHIVE_VAULT, "Can only transfer CONSUMED to ARCHIVE_VAULT"
         return
 
-    # RETAILED can only go to ARCHIVE_VAULT (for manual archiving)
-    if _status == RETAILED:
-        assert _to == ARCHIVE_VAULT, "RETAILED can only transfer to ARCHIVE_VAULT"
-        return
-
-    # Now check roles for normal supply-chain transfers
     has_any: bool = (
         self.roles[FARMER_ROLE][_to] or
         self.roles[INSPECTOR_ROLE][_to] or
@@ -285,62 +228,52 @@ def _recipient_allowed_for_status(_to: address, _status: uint256):
     assert has_any, "Recipient has no valid supply-chain role"
 
     if _status == HARVESTED:
-        # Batch stays with farmer until inspection is complete.
         assert False, "Cannot transfer in HARVESTED state"
 
     elif _status == INSPECTING:
-        # Only logistics can receive from INSPECTING -> IN_TRANSIT
         assert self.roles[LOGISTICS_ROLE][_to], "Recipient must be logistics"
 
     elif _status == IN_TRANSIT:
-        # Only retailer can receive from IN_TRANSIT -> DELIVERED
         assert self.roles[RETAILER_ROLE][_to], "Recipient must be retailer"
 
-    elif _status == DELIVERED:
-        # After DELIVERED, movement is controlled via retail status updates.
-        assert False, "Token in DELIVERED state cannot be transferred"
+    elif _status == DELIVERED or _status == RETAILED:
+        assert False, "Token in DELIVERED/RETAILED state cannot be transferred"
 
 @internal
-def _agri_transfer(
-    _from: address,
-    _to: address,
-    _tokenId: uint256,
-    _data: Bytes[1024]
-):
-    """
-    Wrapper around ERC721 transfer to inject AgriChain business rules
-    (status transition, quarantine, archive).
-    """
+def _agri_transfer(_from: address, _to: address, _tokenId: uint256, _data: Bytes[1024]):
     self._checkExists(_tokenId)
     assert _from == self.tokenOwner[_tokenId], "From is not owner"
 
     _status: uint256 = self.batchStatus[_tokenId]
     self._recipient_allowed_for_status(_to, _status)
 
-    # RECALLED -> QUARANTINE_VAULT (status stays RECALLED)
     if _status == RECALLED and _to == QUARANTINE_VAULT:
+        assert (msg.sender == _from), \
+            "Only holder can transfer recalled batch"
         self._transfer(_from, _to, _tokenId)
         return
 
-    # ERC721 compliance: Never allow transfer to zero address
     assert _to != empty(address), "ERC721: transfer to zero address"
 
-    # CONSUMED -> ARCHIVE_VAULT (archive token, status already CONSUMED)
     if _status == CONSUMED and _to == ARCHIVE_VAULT:
+        assert (msg.sender == _from), \
+            "Only holder can archive consumed batch"
         self._transfer(_from, _to, _tokenId)
         log BatchArchived(_tokenId, _from, _to)
         return
 
     # Status transitions along the logistics route
     if _status == INSPECTING and self.roles[LOGISTICS_ROLE][_to]:
-        # Logistics must receive directly from a farmer wallet
-        assert self.roles[FARMER_ROLE][_from], "Logistics must receive batch from farmer"
+        assert self.roles[FARMER_ROLE][_from], "Logistics must receive batch from farmer holder"
+        assert self.roles[FARMER_ROLE][msg.sender], \
+            "Actor must be farmer to transfer batch to logistics (delegation allowed only within FARMER role)"
         self.batchStatus[_tokenId] = IN_TRANSIT
         log StatusUpdated(_tokenId, msg.sender, INSPECTING, IN_TRANSIT)
 
     elif _status == IN_TRANSIT and self.roles[RETAILER_ROLE][_to]:
-        # Retailer must receive directly from a logistics wallet
-        assert self.roles[LOGISTICS_ROLE][_from], "Retailer must receive batch from logistics"
+        assert self.roles[LOGISTICS_ROLE][_from], "Retailer must receive batch from logistics holder"
+        assert self.roles[LOGISTICS_ROLE][msg.sender], \
+            "Actor must be logistics to transfer batch to retailer (delegation allowed only within LOGISTICS role)"
         self.batchStatus[_tokenId] = DELIVERED
         log StatusUpdated(_tokenId, msg.sender, IN_TRANSIT, DELIVERED)
 
@@ -353,26 +286,17 @@ def _agri_transfer(
 
 @external
 def grantRole(_role: bytes32, _account: address):
-    """
-    Grant a role to an account. Only ADMIN_ROLE can call this.
-    """
     self._checkRole(ADMIN_ROLE, msg.sender)
     self._grantRole(_role, _account)
 
 @external
 def revokeRole(_role: bytes32, _account: address):
-    """
-    Revoke a role from an account. Only ADMIN_ROLE can call this.
-    """
     self._checkRole(ADMIN_ROLE, msg.sender)
     self._revokeRole(_role, _account)
 
 @view
 @external
 def hasRole(_role: bytes32, _account: address) -> bool:
-    """
-    Read-only check for whether an account has a given role.
-    """
     return self.roles[_role][_account]
 
 
@@ -382,12 +306,6 @@ def hasRole(_role: bytes32, _account: address) -> bool:
 
 @external
 def mintBatch(_uri: String[256]) -> uint256:
-    """
-    Farmer mints a new batch (one ERC721 token):
-    - Attach URI metadata (IPFS JSON)
-    - Mint one ERC721 token for the batch
-    - Set initial status to HARVESTED
-    """
     self._checkRole(FARMER_ROLE, msg.sender)
     assert len(_uri) > 0, "URI required"
 
@@ -396,7 +314,6 @@ def mintBatch(_uri: String[256]) -> uint256:
 
     self.tokenURIs[batchId] = _uri
 
-    # Mint NFT
     self.tokenOwner[batchId] = msg.sender
     self.ownedTokensCount[msg.sender] += 1
 
@@ -412,16 +329,6 @@ def mintBatch(_uri: String[256]) -> uint256:
 
 @external
 def markBatchInspected(_batchId: uint256, _newURI: String[256]):
-    """
-    Inspector attests a batch AND updates URI in one transaction:
-    HARVESTED -> INSPECTING + Update URI with certificate
-    
-    This combines attestation with metadata update to save gas and improve UX.
-    
-    Additional constraints:
-    - Batch must still be held by a farmer wallet
-    - New URI required (should contain inspection certificate)
-    """
     self._checkExists(_batchId)
     self._checkRole(INSPECTOR_ROLE, msg.sender)
     assert len(_newURI) > 0, "New URI required for attestation"
@@ -444,10 +351,6 @@ def markBatchInspected(_batchId: uint256, _newURI: String[256]):
 
 @external
 def advanceBatchRetailStatus(_batchId: uint256):
-    """
-    Retailer advances retail status:
-    DELIVERED -> RETAILED -> CONSUMED
-    """
     self._checkExists(_batchId)
     self._checkRole(RETAILER_ROLE, msg.sender)
     assert self.tokenOwner[_batchId] == msg.sender, "Not current holder"
@@ -466,11 +369,6 @@ def advanceBatchRetailStatus(_batchId: uint256):
 
 @external
 def markBatchRecalled(_batchId: uint256, _reasonHash: bytes32):
-    """
-    ADMIN mandates a recall:
-    - Cannot recall if already CONSUMED
-    - Move status to RECALLED
-    """
     self._checkRole(ADMIN_ROLE, msg.sender)
     self._checkExists(_batchId)
 
@@ -485,9 +383,6 @@ def markBatchRecalled(_batchId: uint256, _reasonHash: bytes32):
 
 @external
 def updateBatchURI(_batchId: uint256, _newURI: String[256]):
-    """
-    Allow an INSPECTOR to update token URI (e.g. attach a new certificate JSON on IPFS).
-    """
     self._checkExists(_batchId)
     self._checkRole(INSPECTOR_ROLE, msg.sender)
 
@@ -501,24 +396,12 @@ def updateBatchURI(_batchId: uint256, _newURI: String[256]):
 
 @external
 def transferFrom(_from: address, _to: address, _tokenId: uint256):
-    """
-    ERC721 transferFrom with AgriChain business checks applied.
-    """
     assert self._isApprovedOrOwner(msg.sender, _tokenId), "Not owner nor approved"
     self._agri_transfer(_from, _to, _tokenId, b"")
 
 
 @external
-def safeTransferFrom(
-    _from: address,
-    _to: address,
-    _tokenId: uint256,
-    _data: Bytes[1024] = b""
-):
-    """
-    ERC721 safeTransferFrom - supports both 3-param and 4-param calls via default parameter.
-    Compliant with ERC721 spec requiring both overloads.
-    """
+def safeTransferFrom(_from: address, _to: address, _tokenId: uint256, _data: Bytes[1024] = b""):
     assert self._isApprovedOrOwner(msg.sender, _tokenId), "Not owner nor approved"
     self._agri_transfer(_from, _to, _tokenId, _data)
     self._checkOnERC721Received(_from, _to, _tokenId, _data)
@@ -530,9 +413,6 @@ def safeTransferFrom(
 
 @external
 def approve(_to: address, _tokenId: uint256):
-    """
-    Approve an address to transfer a specific token.
-    """
     self._checkExists(_tokenId)
     owner: address = self.tokenOwner[_tokenId]
     assert _to != owner, "Approval to current owner"
@@ -547,9 +427,6 @@ def approve(_to: address, _tokenId: uint256):
 
 @external
 def setApprovalForAll(_operator: address, _approved: bool):
-    """
-    Set or unset operator approval for all tokens of msg.sender.
-    """
     assert _operator != msg.sender, "Approve to caller"
     self.operatorApprovals[msg.sender][_operator] = _approved
     log ApprovalForAll(msg.sender, _operator, _approved)
@@ -558,9 +435,6 @@ def setApprovalForAll(_operator: address, _approved: bool):
 @view
 @external
 def getApproved(_tokenId: uint256) -> address:
-    """
-    Get the approved address for a specific token.
-    """
     self._checkExists(_tokenId)
     return self.tokenApprovals[_tokenId]
 
@@ -568,9 +442,6 @@ def getApproved(_tokenId: uint256) -> address:
 @view
 @external
 def isApprovedForAll(_owner: address, _operator: address) -> bool:
-    """
-    Check operator approval for all tokens of a given owner.
-    """
     return self.operatorApprovals[_owner][_operator]
 
 
@@ -581,9 +452,6 @@ def isApprovedForAll(_owner: address, _operator: address) -> bool:
 @view
 @external
 def balanceOf(_owner: address) -> uint256:
-    """
-    Returns the number of tokens owned by the given address.
-    """
     assert _owner != empty(address), "Zero address"
     return self.ownedTokensCount[_owner]
 
@@ -591,9 +459,6 @@ def balanceOf(_owner: address) -> uint256:
 @view
 @external
 def ownerOf(_tokenId: uint256) -> address:
-    """
-    Returns the owner of the given tokenId.
-    """
     owner: address = self.tokenOwner[_tokenId]
     assert owner != empty(address), "Token does not exist or archived"
     return owner
@@ -602,9 +467,6 @@ def ownerOf(_tokenId: uint256) -> address:
 @view
 @external
 def tokenURI(_tokenId: uint256) -> String[256]:
-    """
-    Returns the URI (IPFS CID or URL) for the given tokenId.
-    """
     self._checkExists(_tokenId)
     return self.tokenURIs[_tokenId]
 
@@ -678,9 +540,6 @@ def get_RECALLED_STATE() -> uint256:
 @view
 @external
 def getBatchStatus(_batchId: uint256) -> uint256:
-    """
-    Returns the current status of the given batch.
-    """
     return self.batchStatus[_batchId]
 
 
@@ -691,9 +550,6 @@ def getBatchStatus(_batchId: uint256) -> uint256:
 @view
 @external
 def supportsInterface(_interfaceId: bytes4) -> bool:
-    """
-    ERC165-compatible interface detection.
-    """
     return (
         _interfaceId == INTERFACE_ID_ERC165 or
         _interfaceId == INTERFACE_ID_ERC721 or

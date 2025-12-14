@@ -133,9 +133,13 @@ def test_cleared_approval_after_transfer(deployed_contract, farmer, inspector, l
     assert approved == ZERO
 
 
-def test_operator_approval_persists_after_transfer(deployed_contract, farmer, inspector, logistics, retailer):
-    """Operator approval is per-owner, not per-token"""
+def test_operator_approval_persists_after_transfer(deployed_contract, admin, farmer, inspector, logistics, retailer):
+    """Operator approval is per-owner, not per-token.
+    Note: With actor-role enforcement, operator must also have required role."""
     sc = deployed_contract
+    
+    # Grant FARMER_ROLE to inspector so they can act as farmer
+    sc.grantRole(sc.get_FARMER_ROLE(), inspector, sender=admin)
     
     # Farmer mints 2 batches
     sc.mintBatch("ipfs://a", sender=farmer)
@@ -149,12 +153,14 @@ def test_operator_approval_persists_after_transfer(deployed_contract, farmer, in
     # Farmer sets inspector as operator
     sc.setApprovalForAll(inspector, True, sender=farmer)
     
-    # Inspector transfers batch_a
+    # Inspector (with FARMER_ROLE) transfers batch_a
+    # Actor check: msg.sender (inspector) has FARMER_ROLE ✓
     sc.transferFrom(farmer, logistics, batch_a, sender=inspector)
     
     # Inspector still operator for farmer's remaining tokens
     assert sc.isApprovedForAll(farmer, inspector) is True
     
-    # Can still transfer batch_b
+    # Can still transfer batch_b with same operator and actor role
+    # Actor check: msg.sender (inspector) has FARMER_ROLE ✓
     sc.transferFrom(farmer, logistics, batch_b, sender=inspector)
     assert sc.ownerOf(batch_b) == logistics.address
