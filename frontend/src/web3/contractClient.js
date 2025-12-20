@@ -21,7 +21,6 @@ function getMetaMaskProvider() {
 
 export function getReadOnlyContract() {
   try {
-    // 👇 SỬA: Return cached contract nếu đã tồn tại
     if (cachedReadOnlyContract) {
       return cachedReadOnlyContract;
     }
