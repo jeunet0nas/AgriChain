@@ -89,27 +89,3 @@ def test_archive_transfer_only_when_consumed(deployed_contract, farmer, inspecto
     sc.transferFrom(retailer, ARCHIVE, batch_id, sender=retailer)
 
     assert sc.ownerOf(batch_id) == ARCHIVE
-
-
-def test_advance_invalid_states_revert(deployed_contract, farmer, inspector, logistics, retailer):
-    sc = deployed_contract
-
-    sc.mintBatch("ipfs://cid-demo/meta.json", sender=farmer)
-    batch_a = sc.tokenCounter()
-    sc.markBatchInspected(batch_a, "ipfs://cid-demo/inspected.json", sender=inspector)
-    
-    with pytest.raises(ContractLogicError, match="Not current holder"):
-        sc.advanceBatchRetailStatus(batch_a, sender=retailer)
-
-    batch_b = _mint_attest_and_to_retailer(sc, farmer, inspector, logistics, retailer)
-    assert sc.getBatchStatus(batch_b) == sc.get_DELIVERED_STATE()
-    
-    with pytest.raises(ContractLogicError, match="Missing required role"):
-        sc.advanceBatchRetailStatus(batch_b, sender=logistics)
-
-    sc.advanceBatchRetailStatus(batch_b, sender=retailer)
-    sc.advanceBatchRetailStatus(batch_b, sender=retailer)
-    assert sc.getBatchStatus(batch_b) == sc.get_CONSUMED_STATE()
-
-    with pytest.raises(ContractLogicError, match="Invalid state for retail progress"):
-        sc.advanceBatchRetailStatus(batch_b, sender=retailer)

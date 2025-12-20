@@ -206,7 +206,7 @@ export function useInspectorAttest() {
         certificate: certificateCID,
         certificateName: selectedPDF.value.name,
         certificateSize: selectedPDF.value.size,
-        attestedBy: hashAddress(session.currentAccount), // Hash for privacy
+        attestedBy: hashAddress(session.currentAccount),
         attestedAt: new Date().toISOString(),
       };
 

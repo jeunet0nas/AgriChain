@@ -52,7 +52,7 @@ def test_admin_can_recall_from_various_states(
         batch_id = _mint_attest(sc, farmer, inspector)
     elif prep == "in_transit":
         batch_id = _to_in_transit(sc, farmer, inspector, logistics)
-    else:  # delivered
+    else:
         batch_id = _to_delivered(sc, farmer, inspector, logistics, retailer)
 
     sc.markBatchRecalled(batch_id, f"recall-{prep}".encode(), sender=admin)
